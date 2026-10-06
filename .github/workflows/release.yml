@@ -1,0 +1,103 @@
+name: Release
+
+# Build QtVP and publish binaries to a GitHub Release when a version
+# tag (e.g. v1.2.3) is pushed.
+on:
+  push:
+    tags:
+      - 'V*'
+      - 'v*'
+  # Allow a manual dry-run from the Actions tab (builds, uploads artifact,
+  # but only publishes a Release when triggered by a tag).
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required to create the Release and upload assets
+
+jobs:
+  windows:
+    name: Windows (x64)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6.8.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          # QtVP uses: core gui widgets (all in base Qt).
+          # Add qtmultimedia here once sound previews land.
+          cache: true
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Fetch Qt VS Tools MSBuild integration (QtMsBuild)
+        shell: pwsh
+        env:
+          VSADDIN_VERSION: '3.4.1'
+        run: |
+          # The .vcxproj imports Qt.props / qt.targets from $(QtMsBuild). Those
+          # files ship inside the Qt VS Tools add-in .vsix, which is just a zip.
+          # Extract the QtMSBuild folder and point $(QtMsBuild) at it so the
+          # project's imports resolve without the VS extension being installed.
+          $ver = $env:VSADDIN_VERSION
+          $url = "https://download.qt.io/official_releases/vsaddin/$ver/qt-vsaddin-msvc2022-x64-$ver.vsix"
+          Invoke-WebRequest -Uri $url -OutFile qtvsaddin.zip
+          Expand-Archive -Path qtvsaddin.zip -DestinationPath qtvsaddin -Force
+          $qtmsbuild = Join-Path $PWD "qtvsaddin\QtMSBuild"
+          if (-not (Test-Path "$qtmsbuild\qt.targets")) {
+            throw "QtMSBuild not found at $qtmsbuild"
+          }
+          "QtMsBuild=$qtmsbuild" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build (Release|x64)
+        shell: pwsh
+        run: |
+          # QT_ROOT_DIR is exported by install-qt-action and points at the Qt
+          # install. QtMsBuild accepts a full path in QtInstall, bypassing the
+          # machine-registered-version lookup that the local .vcxproj relies on.
+          msbuild QtVP.sln `
+            /m `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:QtInstall="$env:QT_ROOT_DIR" `
+            /verbosity:minimal
+
+      - name: Package with windeployqt
+        shell: pwsh
+        run: |
+          $staging = "dist\QtVP"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          Copy-Item "x64\Release\QtVP.exe" $staging
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" `
+            --release --no-translations --compiler-runtime `
+            "$staging\QtVP.exe"
+          Copy-Item "README.md","LICENSE" $staging -ErrorAction SilentlyContinue
+
+      - name: Zip
+        shell: pwsh
+        run: |
+          $name = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "dev" }
+          $zip = "QtVP-$name-win64.zip"
+          Compress-Archive -Path "dist\QtVP\*" -DestinationPath $zip -Force
+          "ASSET=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QtVP-win64
+          path: ${{ env.ASSET }}
+
+      - name: Publish to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
