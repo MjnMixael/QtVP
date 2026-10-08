@@ -12,6 +12,7 @@ class QAudioOutput;
 class QBuffer;
 class QLabel;
 class QMediaPlayer;
+class QPlainTextEdit;
 class QStackedLayout;
 class QTimer;
 
@@ -33,7 +34,7 @@ private:
     QPixmap m_scaled;   // cached at the last drawn size
 };
 
-// Shows a PreviewContent: an image, an animation, a sound, or a message, with an
+// Shows a PreviewContent: an image, an animation, a sound, text, or a message, with an
 // info line underneath. Used both in the main window's preview pane and in the
 // pop-out window. Animations start playing as soon as they are shown; sounds wait
 // for Play, so stepping through a folder of sounds stays quiet.
@@ -65,6 +66,7 @@ private:
     QLabel* m_message = nullptr;
     ImageView* m_imageView = nullptr;
     QLabel* m_soundView = nullptr;
+    QPlainTextEdit* m_textView = nullptr;
     QLabel* m_info = nullptr;
     QLabel* m_frameLabel = nullptr;     // frame counter, or sound position
 

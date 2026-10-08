@@ -2,9 +2,11 @@
 
 #include <QAudioOutput>
 #include <QBuffer>
+#include <QFontDatabase>
 #include <QLabel>
 #include <QMediaPlayer>
 #include <QPainter>
+#include <QPlainTextEdit>
 #include <QStackedLayout>
 #include <QStyle>
 #include <QTimer>
@@ -67,6 +69,7 @@ void ImageView::paintEvent(QPaintEvent*)
         painter.fillRect(target, checkerBrush());
     painter.drawPixmap(target, m_scaled);
 }
+
 PreviewWidget::PreviewWidget(QWidget* parent)
     : QFrame(parent)
 {
@@ -83,6 +86,11 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     m_soundView->setAlignment(Qt::AlignCenter);
     m_soundView->setPixmap(style()->standardIcon(QStyle::SP_MediaVolume).pixmap(48, 48));
 
+    m_textView = new QPlainTextEdit(this);
+    m_textView->setReadOnly(true);
+    m_textView->setLineWrapMode(QPlainTextEdit::NoWrap);
+    m_textView->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+
     m_info = new QLabel(this);
     m_info->setAlignment(Qt::AlignCenter);
     m_info->setWordWrap(true);
@@ -97,6 +105,7 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     m_stack->addWidget(m_message);
     m_stack->addWidget(m_imageView);
     m_stack->addWidget(m_soundView);
+    m_stack->addWidget(m_textView);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(2, 2, 2, 2);
@@ -120,6 +129,8 @@ void PreviewWidget::setContent(const PreviewContent& content)
     m_durations.clear();
     m_frame = 0;
     clearSound();
+    if (content.kind != PreviewContent::Kind::Text)
+        m_textView->clear();
 
     if (content.kind == PreviewContent::Kind::Animation && !content.frames.empty()) {
         m_frames = content.frames;
@@ -135,6 +146,10 @@ void PreviewWidget::setContent(const PreviewContent& content)
         m_audioName = content.title;
         m_stack->setCurrentWidget(m_soundView);
         m_frameLabel->setText(tr("Press Play to listen"));
+    } else if (content.kind == PreviewContent::Kind::Text) {
+        m_imageView->setImage(QImage());
+        m_textView->setPlainText(content.text);
+        m_stack->setCurrentWidget(m_textView);
     } else if (content.kind == PreviewContent::Kind::Image) {
         m_imageView->setImage(content.image);
         m_stack->setCurrentWidget(m_imageView);

@@ -2,6 +2,8 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QLocale>
+#include <QStringDecoder>
 
 #include <algorithm>
 
@@ -228,6 +230,36 @@ QString oggDetails(const QByteArray& data)
     return text;
 }
 
+// Tables, missions, scripts, shaders, and UI markup. Shown as UTF-8 when valid, otherwise Latin-1.
+PreviewContent textPreview(const QString& ext, QByteArray data)
+{
+    constexpr qsizetype MaxTextBytes = 8 * 1024 * 1024;
+
+    if (data.left(4096).contains('\0'))
+        return PreviewContent::fromMessage(tr("This .%1 file is binary, not text.").arg(ext));
+
+    const qsizetype fullSize = data.size();
+    if (fullSize > MaxTextBytes)
+        data.truncate(MaxTextBytes);
+
+    QStringDecoder utf8(QStringDecoder::Utf8);
+    QString text = utf8(data);
+    QString encoding = tr("UTF-8");
+    if (utf8.hasError()) {
+        text = QString::fromLatin1(data);
+        encoding = tr("Latin-1");
+    }
+
+    PreviewContent content;
+    content.kind = PreviewContent::Kind::Text;
+    content.text = text;
+    const qsizetype lines = text.count('\n') + (text.isEmpty() || text.endsWith('\n') ? 0 : 1);
+    content.info = tr("%1, %2 lines, %3").arg(ext.toUpper()).arg(QLocale().toString(lines)).arg(encoding);
+    if (fullSize > MaxTextBytes)
+        content.info += tr(", showing the first %1 of %2").arg(QLocale().formattedDataSize(MaxTextBytes), QLocale().formattedDataSize(fullSize));
+    return content;
+}
+
 PreviewContent soundPreview(const QString& ext, const QByteArray& data)
 {
     PreviewContent content;
@@ -244,8 +276,10 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
     const QString name = archive.entries()[entry].name;
     const QString ext = QFileInfo(name).suffix().toLower();
 
+    static const QStringList textTypes{ "tbl", "tbm", "fs2", "fc2", "lua", "sdr", "vert", "frag", "geom",
+        "rml", "rcss", "txt", "html" };
     static const QStringList previewTypes{ "png", "jpg", "jpeg", "pcx", "tga", "dds", "ani", "eff", "wav", "ogg" };
-    if (!previewTypes.contains(ext)) {
+    if (!previewTypes.contains(ext) && !textTypes.contains(ext)) {
         PreviewContent content = PreviewContent::fromMessage(ext.isEmpty()
             ? tr("No preview for files without an extension")
             : tr("No preview for .%1 files").arg(ext));
@@ -262,6 +296,8 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
         content = effPreview(archive, entry, data);
     } else if (ext == "wav" || ext == "ogg") {
         content = soundPreview(ext, data);
+    } else if (textTypes.contains(ext)) {
+        content = textPreview(ext, data);
     } else if (ext == "ani" || (ext == "png" && AnimationDecoders::isApng(data))) {
         DecodedAnimation animation;
         const bool ani = ext == "ani";

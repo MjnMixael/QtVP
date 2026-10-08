@@ -25,22 +25,23 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 
 - Phase 1 is done (`658fb96`, `1299112`). Phase 2 is done (`644f2e3`); the user confirmed VPs open and report their file count.
 - Phase 3 is done; the user confirmed browsing, filtering, extraction, and drag-out work.
-- Files: `main.cpp` (applies the saved theme, opens a `.vp` passed on the command line), `Theme.{h,cpp}`, `Core\VpArchive.{h,cpp}`, `Models\FolderTreeModel.{h,cpp}`, `Models\FileListModel.{h,cpp}`, `Windows\MainWindow.{h,cpp}`, `Windows\OptionsDialog.{h,cpp}`, `Forms\MainWindow.ui`, `Forms\OptionsDialog.ui`, `Dependencies\lz4\` (upstream LZ4 1.10.0, `lz4.c`/`lz4.h`/`LICENSE` only).
+- Files: `main.cpp` (applies the saved theme, opens a `.vp` passed on the command line), `Theme.{h,cpp}`, `Core\VpArchive.{h,cpp}`, `Models\FolderTreeModel.{h,cpp}`, `Models\FileListModel.{h,cpp}`, `Previews\` (`PreviewContent.h`, `PreviewLoader`, `PreviewWidget`, `ImageDecoders`, `AnimationDecoders`), `Windows\MainWindow.{h,cpp}`, `Windows\OptionsDialog.{h,cpp}`, `Windows\PreviewWindow.{h,cpp}`, `Forms\MainWindow.ui`, `Forms\OptionsDialog.ui`, `Dependencies\lz4\` (upstream LZ4 1.10.0, `lz4.c`/`lz4.h`/`LICENSE` only), `Dependencies\bcdec\bcdec.h`.
 - `MainWindow` owns a `std::unique_ptr<VpArchive>`. `openVp()` parses into a fresh archive and only replaces the current one on success; failures show a message box with `errorString()`, and `warnings()` go to the status bar. The models hold a raw archive pointer, so they are always set to nullptr before an archive is destroyed.
 - `FolderTreeModel`: `<All files> (N)` first, then the folders alphabetized, each showing its direct file count (the tooltip has the recursive count). Internal id is folder index + 1; 0 is `<All files>`.
 - `FileListModel` sits behind a `QSortFilterProxyModel`: Name, Folder (only shown for `<All files>`), Type, Size (stored bytes), Date & Time. `SortRole` gives raw numbers. `mimeData()` calls a drag provider in `MainWindow` that extracts to a temp folder.
 - `VpCheck\` is a second project in the solution: a console harness over the same `VpArchive.cpp` and `lz4.c` with `list`, `verify` (reads and decompresses every entry), and `extract`. Not shipped by the release workflow.
-- Widgets in the .ui: `mainSplitter` (horizontal) holding `leftSplitter` (vertical: `folderTree` QTreeView, `previewPane` with `playButton`/`stopButton`/`popOutButton` and the `previewArea` QLabel) and `filePane` (`filterEdit` QLineEdit above `fileList` QTreeView: multi-select, sortable, drag-only). Actions: `actionLoadVp`, `actionNewVp`, `actionCloseVp`, `actionExit`, `actionExtractToDir`, `actionFind` (Ctrl+F, focuses the filter), `actionOptions`, `actionAbout`, `actionAboutQt`. Menus: File, Action, Tools, Help. The Recent VPs submenu is built in code.
-- `updateActions()` force-disables everything that is not wired up yet (New VP, preview buttons); enable each piece as it lands.
+- Widgets in the .ui: `mainSplitter` (horizontal) holding `leftSplitter` (vertical: `folderTree` QTreeView, `previewPane` with `playButton`/`stopButton`/`popOutButton` and `previewArea`, a `PreviewWidget`) and `filePane` (`filterEdit` QLineEdit above `fileList` QTreeView: multi-select, sortable, drag-only). Actions: `actionLoadVp`, `actionNewVp`, `actionCloseVp`, `actionExit`, `actionExtractToDir`, `actionFind` (Ctrl+F, focuses the filter), `actionOptions`, `actionAbout`, `actionAboutQt`. Menus: File, Action, Tools, Help. The Recent VPs submenu is built in code.
+- `updateActions()` force-disables what is not wired up yet (New VP); enable each piece as it lands. The play/stop buttons follow `PreviewWidget::playbackChanged`.
 - `QSettings` (org and app name both `QtVP`): `window/*` for geometry, splitters, and the file list header; `paths/lastVpDir`, `paths/lastExtractDir`; `appearance/theme` (`system`, `light`, `dark`); `recentFiles` (up to 10, native paths).
 - Icons are Qt standard icons (`QStyle::standardIcon`). No app icon or `.rc` file yet.
 - The release workflow has not run yet. No version tag exists.
-- Phase 4 in progress, one commit per step: (1) preview pane, pop-out, PNG/JPG/PCX/TGA, (2) DDS, (3) ANI/EFF/APNG, and (4) WAV/OGG - all written, awaiting build; (5) text viewer.
+- Phase 4 is written in five commits, all awaiting build: (1) preview pane, pop-out, PNG/JPG/PCX/TGA, (2) DDS, (3) ANI/EFF/APNG, (4) WAV/OGG, (5) text viewer.
 - Sound: Qt Multimedia (`multimedia` in `QtModules`, `qtmultimedia` in the release workflow; windeployqt brings the FFmpeg plugin) plays the entry from a `QBuffer`, with the file name as the source URL to hint the format. Each `PreviewWidget` creates its player on first Play and only sets the source then, so stepping through sounds is silent and cheap. The info line comes from the WAV `fmt `/`data` chunks or the Vorbis identification header and last granule position. Local VPs hold PCM 8/16/24-bit and MS ADPCM WAVs and Vorbis OGGs only. The release workflow's packaging of the FFmpeg plugin is untested until the first tagged build.
 - Animations (`Previews\AnimationDecoders`, EFF in `PreviewLoader`) are new code rather than AnimStudio's importers: AnimStudio's ANI reader ignored each frame's packing method (0-3) and old headers, and its APNG path needed libpng. ANI: every header version, Hoffoss RLE and standard RLE, code 254 means unchanged only in delta frames; 2390 of 2393 local ANIs decode to exactly their recorded size, and the other 3 are corrupt copies in Storm Front VPs, which now show the frames before the damage with a note. APNG: each frame is rebuilt as a standalone PNG for Qt, then composited with its dispose and blend ops (all used in the 909 local APNGs). EFF: frames `<name>_NNNN.<type>` are looked up in the EFF's folder, then anywhere in the VP. Playback autostarts and loops; play/pause and stop are in the pane and the pop-out (Space toggles there).
 - DDS (`ImageDecoders::decodeDds`, `Dependencies\bcdec\bcdec.h` 0.985 from upstream): DXT1/3/5, DXT2/4, DX10 BC1/2/3/7 (plus sRGB) and 32-bit RGBA/BGRA/BGRX, legacy uncompressed via bitmasks (8/16/24/32-bit, including 1-5-5-5 and 4-4-4-4), 8-bit paletted (palette after the header), alpha-only (shown as gray), luminance. Shows the top mipmap; cubemaps are a cross of six faces, each shrunk to 1024 at most. Flags compressed non-power-of-two sizes, which the engine rejects. A scan of 29k local DDS files found only these variants.
 - Previews: `Previews\PreviewLoader` picks a decoder by extension and returns a self-contained `PreviewContent` (image or message, plus an info line). `Previews\PreviewWidget` (promoted in the .ui as `previewArea`) shows it; `Windows\PreviewWindow` is the pop-out, one instance that follows the selection while open (double-click or the pop-out button; Esc closes). Only a single selected file is previewed. `Previews\ImageDecoders` has PCX (8-bit paletted, plus 24-bit three-plane, which the engine rejects but old VPs contain) and TGA (types 1-3 and RLE 9-11, 8/15/16/24/32-bit, both origins). Images are scaled to fit; small ones are enlarged by whole multiples with no smoothing.
-- **Next: Phase 4 step 5 (text viewer).**
+- Text: read-only monospace `QPlainTextEdit`, no wrapping, for `.tbl .tbm .fs2 .fc2 .lua .sdr .vert .frag .geom .rml .rcss .txt .html` (`.eff` previews as an animation). UTF-8 when valid, else Latin-1; files with a NUL in the first 4 KB are refused as binary; only the first 8 MB is shown.
+- **Next: user builds and tries phase 4, then Phase 5 (creating and editing VPs).**
 
 ## Working conventions
 
@@ -103,7 +104,7 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 | DDS | Uncompressed, DXT1/3/5, BC7, mipmaps, cubemaps | Small decoder (`bcdec`) instead of AnimStudio's compressonator, since we only decode |
 | Animations | ANI, EFF (frames resolved inside the same VP), APNG | AnimStudio importers and playback |
 | Sound | WAV (PCM and ADPCM), OGG | Qt Multimedia, FFmpeg backend, playing from memory |
-| Text | `.tbl .tbm .fs2 .fc2 .lua .eff .sdr .vert .frag .rml .rcss .txt .html` | Maybe: read-only monospace view |
+| Text | `.tbl .tbm .fs2 .fc2 .lua .eff .sdr .vert .frag .rml .rcss .txt .html` | Read-only monospace view |
 | Movies | MP4, WebM, OGG (Theora), MVE | Later |
 | KTX | ETC2 variants | Probably never |
 
@@ -126,12 +127,12 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 - Extract selected (or the selected folder) to a chosen folder.
 - Drag files out of the list straight into Explorer (extract to a temp folder on drag start).
 
-### 4. Previews
+### 4. Previews (written, awaiting build)
 - Preview pane stays resizable like VPView32's. Double-click or the pop-out button opens a larger separate preview window.
 - Images: PCX, TGA, PNG, JPG, DDS (show compression type, size, mip count; cubemap faces).
 - Animations: ANI, EFF, APNG with play/stop, copied from AnimStudio and adapted to read from memory instead of file paths.
 - Sound: WAV and OGG via Qt Multimedia. Adds `multimedia` to `QtModules` and `qtmultimedia` to the release workflow.
-- Optional: text and table viewer.
+- Text and table viewer.
 
 ### 5. Creating and editing VPs
 - New VP, add files or folders (including drag-in from Explorer), delete, rename, new folder, save, save as.
@@ -141,7 +142,6 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 
 ### 6. Later
 - Movie previews (definitely wanted).
-- Text/table preview, if not done in phase 4.
 - Writing LZ41-compressed entries.
 - KTX/ETC2 previews (low priority).
 - App icon and custom toolbar icons (currently Qt's standard icons).

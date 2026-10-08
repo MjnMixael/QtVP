@@ -9,7 +9,7 @@
 // What a preview shows. Self-contained, so it stays valid after the archive closes.
 struct PreviewContent
 {
-    enum class Kind { Message, Image, Animation, Sound };
+    enum class Kind { Message, Image, Animation, Sound, Text };
 
     Kind kind = Kind::Message;
     QString title;      // the file name, or empty for a message
@@ -21,6 +21,8 @@ struct PreviewContent
     std::vector<int> durations;     // milliseconds, one per frame
 
     QByteArray audio;               // the whole file, played from memory
+
+    QString text;
 
     static PreviewContent fromMessage(const QString& text)
     {
