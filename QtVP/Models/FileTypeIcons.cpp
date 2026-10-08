@@ -48,13 +48,13 @@ QIcon FileTypeIcons::forFileName(const QString& fileName)
 
     QIcon icon;
 #ifdef Q_OS_WIN
-    // Both sizes, so the icon stays sharp on scaled displays
-    const QPixmap small = shellIcon(extension, SHGFI_SMALLICON);
-    const QPixmap large = shellIcon(extension, SHGFI_LARGEICON);
-    if (!small.isNull())
-        icon.addPixmap(small);
-    if (!large.isNull())
-        icon.addPixmap(large);
+    // Both sizes, so the icon stays sharp on scaled displays (not "small": windows.h defines it as char)
+    const QPixmap smallIcon = shellIcon(extension, SHGFI_SMALLICON);
+    const QPixmap largeIcon = shellIcon(extension, SHGFI_LARGEICON);
+    if (!smallIcon.isNull())
+        icon.addPixmap(smallIcon);
+    if (!largeIcon.isNull())
+        icon.addPixmap(largeIcon);
 #endif
     if (icon.isNull())
         icon = QApplication::style()->standardIcon(QStyle::SP_FileIcon);
