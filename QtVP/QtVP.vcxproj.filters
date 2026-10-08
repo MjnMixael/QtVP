@@ -41,9 +41,6 @@
     <ClCompile Include="Windows\MainWindow.cpp">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
-    <ClCompile Include="Windows\OptionsDialog.cpp">
-      <Filter>Source Files\Windows</Filter>
-    </ClCompile>
     <ClCompile Include="Dependencies\lz4\lz4.c">
       <Filter>Dependencies\lz4</Filter>
     </ClCompile>
@@ -66,15 +63,9 @@
     <QtMoc Include="Windows\MainWindow.h">
       <Filter>Source Files\Windows</Filter>
     </QtMoc>
-    <QtMoc Include="Windows\OptionsDialog.h">
-      <Filter>Source Files\Windows</Filter>
-    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtUic Include="Forms\MainWindow.ui">
-      <Filter>Form Files</Filter>
-    </QtUic>
-    <QtUic Include="Forms\OptionsDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
   </ItemGroup>

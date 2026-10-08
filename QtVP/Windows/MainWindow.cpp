@@ -4,7 +4,6 @@
 #include "Core/VpArchive.h"
 #include "Models/FileListModel.h"
 #include "Models/FolderTreeModel.h"
-#include "Windows/OptionsDialog.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -173,8 +172,6 @@ void MainWindow::setupIcons()
     ui->actionLoadVp->setIcon(s->standardIcon(QStyle::SP_DialogOpenButton));
     ui->actionNewVp->setIcon(s->standardIcon(QStyle::SP_FileIcon));
     ui->actionExtractToDir->setIcon(s->standardIcon(QStyle::SP_DirOpenIcon));
-    ui->actionExtractToDataDir->setIcon(s->standardIcon(QStyle::SP_DriveHDIcon));
-    ui->actionOptions->setIcon(s->standardIcon(QStyle::SP_FileDialogDetailedView));
 
     ui->playButton->setIcon(s->standardIcon(QStyle::SP_MediaPlay));
     ui->stopButton->setIcon(s->standardIcon(QStyle::SP_MediaStop));
@@ -207,12 +204,11 @@ void MainWindow::setupModels()
     m_selectionLabel = new QLabel(this);
     statusBar()->addPermanentWidget(m_selectionLabel);
 
-    // Right-click menus reuse the extract actions
-    const QList<QAction*> extractActions{ ui->actionExtractToDir, ui->actionExtractToDataDir };
+    // Right-click menus reuse the extract action
     ui->fileList->setContextMenuPolicy(Qt::ActionsContextMenu);
-    ui->fileList->addActions(extractActions);
+    ui->fileList->addAction(ui->actionExtractToDir);
     ui->folderTree->setContextMenuPolicy(Qt::ActionsContextMenu);
-    ui->folderTree->addActions(extractActions);
+    ui->folderTree->addAction(ui->actionExtractToDir);
 }
 
 void MainWindow::setupConnections()
@@ -221,8 +217,6 @@ void MainWindow::setupConnections()
     connect(ui->actionCloseVp, &QAction::triggered, this, &MainWindow::closeVp);
     connect(ui->actionExit, &QAction::triggered, this, &QWidget::close);
     connect(ui->actionExtractToDir, &QAction::triggered, this, &MainWindow::onExtractToDir);
-    connect(ui->actionExtractToDataDir, &QAction::triggered, this, &MainWindow::onExtractToDataDir);
-    connect(ui->actionOptions, &QAction::triggered, this, &MainWindow::onOptions);
     connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::onAbout);
     connect(ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
     connect(ui->actionFind, &QAction::triggered, this, [this] {
@@ -264,13 +258,8 @@ void MainWindow::saveLayout()
 void MainWindow::updateActions()
 {
     const bool hasVp = m_archive != nullptr;
-    const bool hasFsFolder = !OptionsDialog::fsFolder().isEmpty();
     ui->actionCloseVp->setEnabled(hasVp);
     ui->actionExtractToDir->setEnabled(hasVp);
-    ui->actionExtractToDataDir->setEnabled(hasVp && hasFsFolder);
-    ui->actionExtractToDataDir->setToolTip(hasFsFolder
-        ? tr("Extract into the FreeSpace folder, keeping the VP's paths")
-        : tr("Set the FreeSpace folder in Options first"));
 
     // Not wired up yet
     ui->actionNewVp->setEnabled(false);
@@ -545,29 +534,6 @@ void MainWindow::onExtractToDir()
 
     settings.setValue("paths/lastExtractDir", target);
     extractTo(target, std::move(entries), baseFolder);
-}
-
-void MainWindow::onExtractToDataDir()
-{
-    const QString folder = OptionsDialog::fsFolder();
-    if (folder.isEmpty() || !QDir(folder).exists()) {
-        QMessageBox::warning(this, tr("Extract"), tr("The FreeSpace folder %1 was not found. Set it in Options.")
-            .arg(QDir::toNativeSeparators(folder)));
-        return;
-    }
-
-    // Full VP paths, so data\tables\x.tbl lands in <folder>\data\tables
-    std::vector<int> entries;
-    int baseFolder = VpArchive::RootFolder;
-    if (extractionSet(entries, baseFolder))
-        extractTo(folder, std::move(entries), VpArchive::RootFolder);
-}
-
-void MainWindow::onOptions()
-{
-    OptionsDialog dialog(this);
-    if (dialog.exec() == QDialog::Accepted)
-        updateActions();
 }
 
 void MainWindow::onAbout()

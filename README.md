@@ -10,7 +10,6 @@ QtVP keeps the familiar VPView32 layout (folder tree, file list, resizable previ
 
 - Open VP archives and browse their folders
 - Extract selected files, folders, or the whole archive; drag files straight out to Explorer
-- Extract to a configured FreeSpace data folder
 - Preview images (PCX, TGA, DDS, PNG, JPG), animations (ANI, EFF, APNG), and sounds (WAV, OGG)
 - Create and edit VPs: add, remove, rename, and save
 - Read compressed (LZ41) VP entries

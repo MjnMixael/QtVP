@@ -55,8 +55,6 @@ private:
 
     void onLoadVp();
     void onExtractToDir();
-    void onExtractToDataDir();
-    void onOptions();
     void onAbout();
 
     Ui::MainWindow* ui;
