@@ -8,7 +8,10 @@
 
 #include "Previews/PreviewContent.h"
 
+class QAudioOutput;
+class QBuffer;
 class QLabel;
+class QMediaPlayer;
 class QStackedLayout;
 class QTimer;
 
@@ -30,9 +33,10 @@ private:
     QPixmap m_scaled;   // cached at the last drawn size
 };
 
-// Shows a PreviewContent: an image, an animation, or a message, with an info line
-// underneath. Used both in the main window's preview pane and in the pop-out window.
-// Animations start playing as soon as they are shown.
+// Shows a PreviewContent: an image, an animation, a sound, or a message, with an
+// info line underneath. Used both in the main window's preview pane and in the
+// pop-out window. Animations start playing as soon as they are shown; sounds wait
+// for Play, so stepping through a folder of sounds stays quiet.
 class PreviewWidget : public QFrame
 {
     Q_OBJECT
@@ -42,7 +46,7 @@ public:
 
     void setContent(const PreviewContent& content);
 
-    bool isPlayable() const { return m_frames.size() > 1; }
+    bool isPlayable() const { return m_frames.size() > 1 || !m_audio.isEmpty(); }
     bool isPlaying() const;
 
     void togglePlay();
@@ -54,15 +58,26 @@ signals:
 private:
     void showFrame(size_t index);
     void nextFrame();
+    void clearSound();
+    void updateSoundPosition();
 
     QStackedLayout* m_stack = nullptr;
     QLabel* m_message = nullptr;
     ImageView* m_imageView = nullptr;
+    QLabel* m_soundView = nullptr;
     QLabel* m_info = nullptr;
-    QLabel* m_frameLabel = nullptr;
+    QLabel* m_frameLabel = nullptr;     // frame counter, or sound position
 
     QTimer* m_timer = nullptr;
     std::vector<QImage> m_frames;
     std::vector<int> m_durations;
     size_t m_frame = 0;
+
+    // Created on first use; the source is only set when Play is pressed
+    QMediaPlayer* m_player = nullptr;
+    QAudioOutput* m_audioOutput = nullptr;
+    QBuffer* m_audioBuffer = nullptr;
+    QByteArray m_audio;
+    QString m_audioName;
+    bool m_audioLoaded = false;
 };

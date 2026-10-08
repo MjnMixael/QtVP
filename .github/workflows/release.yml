@@ -29,8 +29,8 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          # QtVP uses: core gui widgets (all in base Qt).
-          # Add qtmultimedia here once sound previews land.
+          # QtVP uses core, gui, and widgets (base Qt) plus multimedia for sound previews
+          modules: 'qtmultimedia'
           cache: true
 
       - name: Add MSBuild to PATH

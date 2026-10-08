@@ -1,8 +1,12 @@
 #include "PreviewWidget.h"
 
+#include <QAudioOutput>
+#include <QBuffer>
 #include <QLabel>
+#include <QMediaPlayer>
 #include <QPainter>
 #include <QStackedLayout>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -63,7 +67,6 @@ void ImageView::paintEvent(QPaintEvent*)
         painter.fillRect(target, checkerBrush());
     painter.drawPixmap(target, m_scaled);
 }
-
 PreviewWidget::PreviewWidget(QWidget* parent)
     : QFrame(parent)
 {
@@ -75,6 +78,10 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     m_message->setMargin(8);
 
     m_imageView = new ImageView(this);
+
+    m_soundView = new QLabel(this);
+    m_soundView->setAlignment(Qt::AlignCenter);
+    m_soundView->setPixmap(style()->standardIcon(QStyle::SP_MediaVolume).pixmap(48, 48));
 
     m_info = new QLabel(this);
     m_info->setAlignment(Qt::AlignCenter);
@@ -89,6 +96,7 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     m_stack = new QStackedLayout;
     m_stack->addWidget(m_message);
     m_stack->addWidget(m_imageView);
+    m_stack->addWidget(m_soundView);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(2, 2, 2, 2);
@@ -111,6 +119,7 @@ void PreviewWidget::setContent(const PreviewContent& content)
     m_frames.clear();
     m_durations.clear();
     m_frame = 0;
+    clearSound();
 
     if (content.kind == PreviewContent::Kind::Animation && !content.frames.empty()) {
         m_frames = content.frames;
@@ -120,6 +129,12 @@ void PreviewWidget::setContent(const PreviewContent& content)
         showFrame(0);
         if (isPlayable())
             m_timer->start(m_durations[0]);
+    } else if (content.kind == PreviewContent::Kind::Sound) {
+        m_imageView->setImage(QImage());
+        m_audio = content.audio;
+        m_audioName = content.title;
+        m_stack->setCurrentWidget(m_soundView);
+        m_frameLabel->setText(tr("Press Play to listen"));
     } else if (content.kind == PreviewContent::Kind::Image) {
         m_imageView->setImage(content.image);
         m_stack->setCurrentWidget(m_imageView);
@@ -137,7 +152,9 @@ void PreviewWidget::setContent(const PreviewContent& content)
 
 bool PreviewWidget::isPlaying() const
 {
-    return m_timer->isActive();
+    if (m_timer->isActive())
+        return true;
+    return m_player && m_player->playbackState() == QMediaPlayer::PlayingState;
 }
 
 // Play and pause
@@ -145,6 +162,34 @@ void PreviewWidget::togglePlay()
 {
     if (!isPlayable())
         return;
+
+    if (!m_audio.isEmpty()) {
+        if (!m_player) {
+            m_player = new QMediaPlayer(this);
+            m_audioOutput = new QAudioOutput(this);
+            m_player->setAudioOutput(m_audioOutput);
+            m_audioBuffer = new QBuffer(this);
+            connect(m_player, &QMediaPlayer::playbackStateChanged, this, &PreviewWidget::playbackChanged);
+            connect(m_player, &QMediaPlayer::positionChanged, this, &PreviewWidget::updateSoundPosition);
+            connect(m_player, &QMediaPlayer::durationChanged, this, &PreviewWidget::updateSoundPosition);
+            connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString& text) {
+                m_frameLabel->setText(tr("Could not play the sound: %1").arg(text));
+            });
+        }
+        if (!m_audioLoaded) {
+            m_audioBuffer->setData(m_audio);
+            m_audioBuffer->open(QIODevice::ReadOnly);
+            // The file name in the URL tells the backend what format to expect
+            m_player->setSourceDevice(m_audioBuffer, QUrl(m_audioName));
+            m_audioLoaded = true;
+        }
+        if (m_player->playbackState() == QMediaPlayer::PlayingState)
+            m_player->pause();
+        else
+            m_player->play();
+        return;
+    }
+
     if (isPlaying())
         m_timer->stop();
     else
@@ -152,11 +197,18 @@ void PreviewWidget::togglePlay()
     emit playbackChanged();
 }
 
-// Stops and goes back to the first frame
+// Stops and goes back to the start
 void PreviewWidget::stop()
 {
     if (!isPlayable())
         return;
+
+    if (!m_audio.isEmpty()) {
+        if (m_player)
+            m_player->stop();
+        return;
+    }
+
     m_timer->stop();
     showFrame(0);
     emit playbackChanged();
@@ -173,4 +225,26 @@ void PreviewWidget::nextFrame()
 {
     showFrame((m_frame + 1) % m_frames.size());
     m_timer->start(m_durations[m_frame]);
+}
+
+// Detaches the player from the old buffer before its data goes away
+void PreviewWidget::clearSound()
+{
+    if (m_player) {
+        m_player->stop();
+        m_player->setSourceDevice(nullptr);
+        m_audioBuffer->close();
+        m_audioBuffer->setData(QByteArray());
+    }
+    m_audio.clear();
+    m_audioName.clear();
+    m_audioLoaded = false;
+}
+
+void PreviewWidget::updateSoundPosition()
+{
+    auto format = [](qint64 ms) {
+        return QString("%1:%2.%3").arg(ms / 60000).arg((ms / 1000) % 60, 2, 10, QChar('0')).arg((ms / 100) % 10);
+    };
+    m_frameLabel->setText(QString("%1 / %2").arg(format(m_player->position()), format(m_player->duration())));
 }

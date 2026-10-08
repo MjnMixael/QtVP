@@ -138,6 +138,105 @@ PreviewContent effPreview(const VpArchive& archive, int entry, const QByteArray&
     return animationPreview("EFF", animation);
 }
 
+QString formatDuration(double seconds)
+{
+    if (seconds < 60)
+        return tr("%1 s").arg(seconds, 0, 'f', 1);
+    const int whole = int(seconds + 0.5);
+    return QString("%1:%2").arg(whole / 60).arg(whole % 60, 2, 10, QChar('0'));
+}
+
+QString channelText(int channels)
+{
+    return channels == 1 ? tr("mono") : channels == 2 ? tr("stereo") : tr("%1 channels").arg(channels);
+}
+
+quint32 readLe32(const char* p)
+{
+    const auto* u = reinterpret_cast<const uchar*>(p);
+    return quint32(u[0]) | (quint32(u[1]) << 8) | (quint32(u[2]) << 16) | (quint32(u[3]) << 24);
+}
+
+quint16 readLe16(const char* p)
+{
+    const auto* u = reinterpret_cast<const uchar*>(p);
+    return quint16(u[0] | (u[1] << 8));
+}
+
+// Codec, rate, channels, and length from the RIFF chunks
+QString wavDetails(const QByteArray& data)
+{
+    if (data.size() < 12 || !data.startsWith("RIFF") || data.mid(8, 4) != "WAVE")
+        return tr("not a RIFF WAVE file");
+
+    int tag = 0, channels = 0, bits = 0;
+    quint32 rate = 0, byteRate = 0, dataBytes = 0;
+    qsizetype pos = 12;
+    while (pos + 8 <= data.size()) {
+        const QByteArray id = data.mid(pos, 4);
+        const quint32 length = readLe32(data.constData() + pos + 4);
+        if (id == "fmt " && length >= 16 && pos + 24 <= data.size()) {
+            const char* fmt = data.constData() + pos + 8;
+            tag = readLe16(fmt);
+            channels = readLe16(fmt + 2);
+            rate = readLe32(fmt + 4);
+            byteRate = readLe32(fmt + 8);
+            bits = readLe16(fmt + 14);
+        } else if (id == "data") {
+            dataBytes = quint32(std::min<qint64>(length, data.size() - pos - 8));
+        }
+        pos += 8 + qsizetype(length) + (length & 1);
+    }
+
+    QString codec;
+    switch (tag) {
+    case 0: return tr("no format chunk");
+    case 1: codec = tr("PCM %1-bit").arg(bits); break;
+    case 2: codec = tr("MS ADPCM"); break;
+    case 0x11: codec = tr("IMA ADPCM"); break;
+    default: codec = tr("codec 0x%1").arg(tag, 0, 16); break;
+    }
+
+    QString text = tr("%1, %2 Hz, %3").arg(codec).arg(rate).arg(channelText(channels));
+    if (byteRate > 0)
+        text += tr(", %1").arg(formatDuration(double(dataBytes) / byteRate));
+    return text;
+}
+
+// Rate and channels from the Vorbis identification header; length from the last page's granule position
+QString oggDetails(const QByteArray& data)
+{
+    if (data.size() < 28 || !data.startsWith("OggS"))
+        return tr("not an Ogg file");
+
+    const int segments = uchar(data[26]);
+    const qsizetype packet = 27 + segments;
+    if (data.size() < packet + 16 || data.mid(packet, 7) != QByteArray("\x01vorbis", 7))
+        return tr("Ogg, not Vorbis");
+
+    const int channels = uchar(data[packet + 11]);
+    const quint32 rate = readLe32(data.constData() + packet + 12);
+    QString text = tr("Vorbis, %1 Hz, %2").arg(rate).arg(channelText(channels));
+
+    const qsizetype last = data.lastIndexOf("OggS");
+    if (rate > 0 && last >= 0 && last + 14 <= data.size()) {
+        const quint64 granule = quint64(readLe32(data.constData() + last + 6))
+            | (quint64(readLe32(data.constData() + last + 10)) << 32);
+        if (granule != ~quint64(0))
+            text += tr(", %1").arg(formatDuration(double(granule) / rate));
+    }
+    return text;
+}
+
+PreviewContent soundPreview(const QString& ext, const QByteArray& data)
+{
+    PreviewContent content;
+    content.kind = PreviewContent::Kind::Sound;
+    content.audio = data;
+    content.info = tr("%1, %2").arg(ext.toUpper(), ext == "wav" ? wavDetails(data) : oggDetails(data));
+    return content;
+}
+
 } // namespace
 
 PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
@@ -145,7 +244,7 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
     const QString name = archive.entries()[entry].name;
     const QString ext = QFileInfo(name).suffix().toLower();
 
-    static const QStringList previewTypes{ "png", "jpg", "jpeg", "pcx", "tga", "dds", "ani", "eff" };
+    static const QStringList previewTypes{ "png", "jpg", "jpeg", "pcx", "tga", "dds", "ani", "eff", "wav", "ogg" };
     if (!previewTypes.contains(ext)) {
         PreviewContent content = PreviewContent::fromMessage(ext.isEmpty()
             ? tr("No preview for files without an extension")
@@ -161,6 +260,8 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
         content = PreviewContent::fromMessage(tr("Could not read the file: %1").arg(error));
     } else if (ext == "eff") {
         content = effPreview(archive, entry, data);
+    } else if (ext == "wav" || ext == "ogg") {
+        content = soundPreview(ext, data);
     } else if (ext == "ani" || (ext == "png" && AnimationDecoders::isApng(data))) {
         DecodedAnimation animation;
         const bool ani = ext == "ani";
