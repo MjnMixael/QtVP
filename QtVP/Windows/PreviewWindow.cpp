@@ -65,6 +65,7 @@ void PreviewWindow::closeEvent(QCloseEvent* event)
     m_preview->setContent(PreviewContent());
     QSettings().setValue("window/previewGeometry", saveGeometry());
     event->accept();
+    emit closed();
 }
 
 void PreviewWindow::updatePlaybackButtons()

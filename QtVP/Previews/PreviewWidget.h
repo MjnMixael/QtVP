@@ -77,6 +77,9 @@ public:
     void togglePlay();
     void stop();
 
+    // Stops a sound or movie, leaving animations alone
+    void stopMedia();
+
     // Creates the sound player now instead of on the first Play
     void prepareAudio();
 

@@ -321,6 +321,12 @@ void PreviewWidget::stop()
     emit playbackChanged();
 }
 
+void PreviewWidget::stopMedia()
+{
+    if (m_player && !m_audio.isEmpty())
+        m_player->stop();
+}
+
 void PreviewWidget::showFrame(size_t index)
 {
     m_frame = index;

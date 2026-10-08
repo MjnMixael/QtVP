@@ -100,10 +100,11 @@ void MainWindow::warmUp()
     }
 }
 
-// Settings read at startup and again after the Options dialog
+// Settings read at startup and after the Options dialog
 void MainWindow::applySettings()
 {
-    ui->previewArea->setAutoplayMedia(OptionsDialog::autoplayMedia());
+    // While the pop-out is open the pane stays quiet
+    ui->previewArea->setAutoplayMedia(OptionsDialog::autoplayMedia() && !previewWindowOpen());
 }
 
 QString MainWindow::openFolderRoot()
@@ -522,8 +523,17 @@ bool MainWindow::previewWindowOpen() const
 
 void MainWindow::openPreviewWindow()
 {
-    if (!m_previewWindow)
+    if (!m_previewWindow) {
         m_previewWindow = new PreviewWindow(this);
+        // The window still counts as visible while it closes, so set this directly
+        connect(m_previewWindow, &PreviewWindow::closed, this, [this] {
+            ui->previewArea->setAutoplayMedia(OptionsDialog::autoplayMedia());
+        });
+    }
+
+    // The pop-out takes over: silence the pane and keep it from autoplaying behind it
+    ui->previewArea->stopMedia();
+    ui->previewArea->setAutoplayMedia(false);
 
     if (!m_previewWindow->isVisible()) {
         if (m_previewSpinnerShown)

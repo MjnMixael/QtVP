@@ -18,6 +18,9 @@ public:
     void setContent(const PreviewContent& content);
     void setLoading(const QString& title);
 
+signals:
+    void closed();
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 
