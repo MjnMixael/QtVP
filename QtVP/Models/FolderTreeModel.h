@@ -26,6 +26,9 @@ public:
     int folderAt(const QModelIndex& index) const;
     QModelIndex allFilesIndex() const;
 
+    // Invalid if the folder is the root, removed, or under a removed folder
+    QModelIndex indexOf(int folder) const;
+
     QModelIndex index(int row, int column, const QModelIndex& parent = {}) const override;
     QModelIndex parent(const QModelIndex& child) const override;
     int rowCount(const QModelIndex& parent = {}) const override;
@@ -36,6 +39,7 @@ private:
     const VpDocument* m_document = nullptr;
     std::vector<std::vector<int>> m_children;   // sorted subfolders of each folder
     std::vector<int> m_row;                     // each folder's row under its parent
+    std::vector<char> m_inTree;                 // reachable from the root
     int m_fileCount = 0;
     QIcon m_folderIcon;
     QIcon m_allFilesIcon;

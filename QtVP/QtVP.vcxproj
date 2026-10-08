@@ -115,6 +115,7 @@
     <ClCompile Include="Previews\ImageDecoders.cpp" />
     <ClCompile Include="Previews\PreviewLoader.cpp" />
     <ClCompile Include="Previews\PreviewWidget.cpp" />
+    <ClCompile Include="Windows\DocumentEditor.cpp" />
     <ClCompile Include="Windows\FileOpener.cpp" />
     <ClCompile Include="Windows\MainWindow.cpp" />
     <ClCompile Include="Windows\OptionsDialog.cpp" />
@@ -140,6 +141,7 @@
     <QtUic Include="Forms\OptionsDialog.ui" />
     <QtMoc Include="Models\FileListModel.h" />
     <QtMoc Include="Models\FolderTreeModel.h" />
+    <QtMoc Include="Windows\DocumentEditor.h" />
     <QtMoc Include="Windows\MainWindow.h" />
     <QtMoc Include="Windows\OptionsDialog.h" />
     <QtMoc Include="Previews\PreviewWidget.h" />

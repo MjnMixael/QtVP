@@ -10,6 +10,7 @@
 
 #include "Previews/PreviewContent.h"
 
+class DocumentEditor;
 class FileListModel;
 class FolderTreeModel;
 class PreviewWindow;
@@ -33,13 +34,16 @@ public:
     // Loads the slow-to-start parts up front; called while the splash screen shows
     void warmUp();
 
+    // These ask about unsaved changes first
     void openVp(const QString& path);
     void closeVp();
+    void newVp();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void setupIcons();
@@ -75,11 +79,33 @@ private:
     void updateRecentMenu();
 
     void onLoadVp();
+
+    // Documents and saving
+    void loadVp(const QString& path);
+    void setDocument(std::unique_ptr<VpDocument> document);
+    bool maybeSave();
+    bool save();
+    bool saveAs();
+    bool saveTo(const QString& path);
+    void updateTitle();
+
+    // Editing
+    int editFolder() const;
+    void onAddFiles();
+    void onAddFolder();
+    void onNewFolder();
+    void onRename();
+    void onDelete();
+    void refreshAfterEdit();
+    void collectExpanded(const QModelIndex& parent, std::vector<int>& folders) const;
+    void selectFiles(const std::vector<int>& files, int current);
+    bool handleViewDrag(bool onTree, QDropEvent* event, bool drop);
     void onExtractToDir();
     void onAbout();
 
     Ui::MainWindow* ui;
     std::unique_ptr<VpDocument> m_document;
+    DocumentEditor* m_editor = nullptr;
     FolderTreeModel* m_folderModel = nullptr;
     FileListModel* m_fileModel = nullptr;
     QSortFilterProxyModel* m_fileProxy = nullptr;

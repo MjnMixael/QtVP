@@ -74,6 +74,9 @@
     <ClCompile Include="Windows\PreviewWindow.cpp">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
+    <ClCompile Include="Windows\DocumentEditor.cpp">
+      <Filter>Source Files\Windows</Filter>
+    </ClCompile>
     <ClCompile Include="Windows\FileOpener.cpp">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
@@ -139,6 +142,9 @@
       <Filter>Source Files\Previews</Filter>
     </QtMoc>
     <QtMoc Include="Windows\PreviewWindow.h">
+      <Filter>Source Files\Windows</Filter>
+    </QtMoc>
+    <QtMoc Include="Windows\DocumentEditor.h">
       <Filter>Source Files\Windows</Filter>
     </QtMoc>
     <QtMoc Include="Windows\MainWindow.h">

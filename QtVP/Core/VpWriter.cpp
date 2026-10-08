@@ -28,21 +28,20 @@ void appendU32(QByteArray& out, quint32 value)
     out.append(bytes, 4);
 }
 
-// Empty if the name can go in a VP as it is
-QString nameProblem(const QString& name)
+} // namespace
+
+QString VpWriter::nameProblem(const QString& name)
 {
     if (!VpArchive::isSafeName(name))
-        return VpWriter::tr("not a valid file name");
+        return tr("not a valid file name");
     for (const QChar c : name) {
         if (c.unicode() > 0xFF)
-            return VpWriter::tr("has characters a VP cannot store");
+            return tr("has characters a VP cannot store");
     }
     if (name.size() > NameSize - 1)
-        return VpWriter::tr("is %1 characters long; VPs allow %2").arg(name.size()).arg(NameSize - 1);
+        return tr("is %1 characters long; VPs allow %2").arg(name.size()).arg(NameSize - 1);
     return QString();
 }
-
-} // namespace
 
 VpWriter::Problems VpWriter::check(const VpDocument& document)
 {
@@ -86,6 +85,11 @@ VpWriter::Problems VpWriter::check(const VpDocument& document)
         }
     };
     checkFolder(VpDocument::RootFolder);
+
+    // The engine only loads files that sit in a folder such as data
+    const size_t topLevel = document.folders()[VpDocument::RootFolder].files.size();
+    if (topLevel > 0)
+        problems.warnings << tr("%n file(s) are at the top level, outside any folder; the engine ignores them", nullptr, int(topLevel));
 
     if (total > MaxVpSize) {
         problems.errors << tr("The VP would be %1, over the format's 4 GB limit.")

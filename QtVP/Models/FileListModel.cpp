@@ -140,3 +140,12 @@ QMimeData* FileListModel::mimeData(const QModelIndexList& indexes) const
     mime->setUrls(urls);
     return mime;
 }
+
+QHash<int, int> FileListModel::rowLookup() const
+{
+    QHash<int, int> rows;
+    rows.reserve(qsizetype(m_entries.size()));
+    for (int row = 0; row < int(m_entries.size()); ++row)
+        rows.insert(m_entries[row], row);
+    return rows;
+}

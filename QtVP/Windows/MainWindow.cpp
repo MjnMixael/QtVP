@@ -3,10 +3,12 @@
 
 #include "Icons.h"
 #include "Core/VpDocument.h"
+#include "Core/VpWriter.h"
 #include "Models/FileListModel.h"
 #include "Models/FolderTreeModel.h"
 #include "Previews/PreviewLoader.h"
 #include "Previews/PreviewWidget.h"
+#include "Windows/DocumentEditor.h"
 #include "Windows/FileOpener.h"
 #include "Windows/OptionsDialog.h"
 #include "Windows/PreviewWindow.h"
@@ -30,10 +32,12 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSortFilterProxyModel>
 #include <QStyle>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QUndoStack>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
@@ -69,6 +73,23 @@ MainWindow::MainWindow(QWidget* parent)
     m_recentMenu = new QMenu(tr("&Recent VPs"), this);
     ui->menuFile->insertMenu(ui->actionExit, m_recentMenu);
     ui->menuFile->insertSeparator(ui->actionExit);
+
+    // Undo and redo are the only Edit menu items; the edits themselves are on right-click
+    m_editor = new DocumentEditor(this, this);
+    QAction* undo = m_editor->undoStack()->createUndoAction(this, tr("&Undo"));
+    undo->setShortcut(QKeySequence::Undo);
+    QAction* redo = m_editor->undoStack()->createRedoAction(this, tr("&Redo"));
+    redo->setShortcut(QKeySequence::Redo);
+    auto* editMenu = new QMenu(tr("&Edit"), this);
+    editMenu->addActions({ undo, redo });
+    menuBar()->insertMenu(ui->menuTools->menuAction(), editMenu);
+
+    // Dropping on the tree or the list adds files; the filter handles every drag there
+    for (QAbstractItemView* view : { static_cast<QAbstractItemView*>(ui->folderTree), static_cast<QAbstractItemView*>(ui->fileList) }) {
+        view->setAcceptDrops(true);
+        view->viewport()->setAcceptDrops(true);
+        view->viewport()->installEventFilter(this);
+    }
 
     setupIcons();
     setupModels();
@@ -180,8 +201,10 @@ void MainWindow::openSelected(bool chooseApp)
 
 MainWindow::~MainWindow()
 {
-    // The models outlive this destructor as child objects; keep them off the document
+    // The models and the editor outlive this destructor as child objects; keep them off the document
     waitForPreviewLoad();
+    m_editor->disconnect(this);
+    m_editor->setDocument(nullptr);
     m_folderModel->setDocument(nullptr);
     m_fileModel->setDocument(nullptr);
     delete ui;
@@ -189,7 +212,34 @@ MainWindow::~MainWindow()
 
 void MainWindow::openVp(const QString& path)
 {
-    // Parse into a fresh archive so a bad file leaves the current one open
+    if (maybeSave())
+        loadVp(path);
+}
+
+void MainWindow::closeVp()
+{
+    if (!maybeSave())
+        return;
+    setDocument(nullptr);
+    statusBar()->showMessage(tr("Ready"));
+}
+
+// A new VP starts with a data folder, since the engine only loads files inside one
+void MainWindow::newVp()
+{
+    if (!maybeSave())
+        return;
+
+    auto document = std::make_unique<VpDocument>();
+    const int data = document->addFolder(VpDocument::RootFolder, QStringLiteral("data"));
+    setDocument(std::move(document));
+    ui->folderTree->setCurrentIndex(m_folderModel->indexOf(data));
+    statusBar()->showMessage(tr("New VP. Add files or folders, then save."));
+}
+
+// Opens without asking about unsaved changes; saving uses this to reload the new file
+void MainWindow::loadVp(const QString& path)
+{
     auto archive = std::make_unique<VpArchive>();
     if (!archive->open(path)) {
         QMessageBox::warning(this, tr("Load VP"), tr("Could not open %1.\n\n%2")
@@ -199,48 +249,197 @@ void MainWindow::openVp(const QString& path)
         return;
     }
 
-    // Detach the models and finish any preview load before the old document is destroyed
-    waitForPreviewLoad();
-    m_folderModel->setDocument(nullptr);
-    m_fileModel->setDocument(nullptr);
-    m_document = std::make_unique<VpDocument>(std::move(archive));
-    m_folderModel->setDocument(m_document.get());
-    m_fileModel->setDocument(m_document.get());
-
-    // Start on <All files> with the top-level folders open
-    ui->folderTree->expandToDepth(0);
-    ui->folderTree->setCurrentIndex(m_folderModel->allFilesIndex());
-    resetPreview();
-
+    const QStringList warnings = archive->warnings();
+    setDocument(std::make_unique<VpDocument>(std::move(archive)));
     addRecentFile(path);
-    setWindowTitle(tr("QtVP - %1").arg(QFileInfo(path).fileName()));
 
     QString status = tr("Opened %1").arg(QDir::toNativeSeparators(path));
-    const QStringList warnings = m_document->archive()->warnings();
     if (!warnings.isEmpty())
         status += tr(". Warning: %1").arg(warnings.join(' '));
     statusBar()->showMessage(status);
-
-    updateActions();
 }
 
-void MainWindow::closeVp()
+// Swaps in a document, or none, with a fresh history, showing <All files>
+void MainWindow::setDocument(std::unique_ptr<VpDocument> document)
 {
+    // Detach everything and finish any preview load before the old document is destroyed
     waitForPreviewLoad();
+    {
+        const QSignalBlocker blocker(m_editor);
+        m_editor->setDocument(nullptr);
+    }
     m_folderModel->setDocument(nullptr);
     m_fileModel->setDocument(nullptr);
-    m_document.reset();
+    m_document = std::move(document);
     m_currentFolder = FolderTreeModel::NoFolder;
-    resetPreview();
 
-    setWindowTitle(tr("QtVP"));
-    statusBar()->showMessage(tr("Ready"));
+    {
+        const QSignalBlocker blocker(m_editor);
+        m_editor->setDocument(m_document.get());
+    }
+    m_folderModel->setDocument(m_document.get());
+    m_fileModel->setDocument(m_document.get());
+    if (m_document) {
+        ui->folderTree->expandToDepth(0);
+        ui->folderTree->setCurrentIndex(m_folderModel->allFilesIndex());
+    }
+
+    resetPreview();
+    updateTitle();
     updateSelectionStatus();
     updateActions();
 }
 
+void MainWindow::updateTitle()
+{
+    if (!m_document) {
+        setWindowTitle(tr("QtVP"));
+        setWindowModified(false);
+        return;
+    }
+    const QString name = m_document->path().isEmpty() ? tr("Untitled") : QFileInfo(m_document->path()).fileName();
+    setWindowTitle(tr("QtVP - %1[*]").arg(name));
+    setWindowModified(m_editor->isModified());
+}
+
+// True if it is fine to drop the current document: nothing unsaved, or the user saved or discarded it
+bool MainWindow::maybeSave()
+{
+    if (!m_document || !m_editor->isModified())
+        return true;
+
+    const QString name = m_document->path().isEmpty() ? tr("Untitled") : QFileInfo(m_document->path()).fileName();
+    const auto answer = QMessageBox::warning(this, tr("QtVP"), tr("%1 has unsaved changes. Save them?").arg(name),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+    if (answer == QMessageBox::Save)
+        return save();
+    return answer == QMessageBox::Discard;
+}
+
+bool MainWindow::save()
+{
+    if (!m_document)
+        return false;
+    return m_document->path().isEmpty() ? saveAs() : saveTo(m_document->path());
+}
+
+bool MainWindow::saveAs()
+{
+    if (!m_document)
+        return false;
+
+    QSettings settings;
+    const QString start = m_document->path().isEmpty()
+        ? QDir(settings.value("paths/lastVpDir").toString()).filePath("untitled.vp")
+        : m_document->path();
+    QString path = QFileDialog::getSaveFileName(this, tr("Save VP As"), start, tr("VP archives (*.vp)"));
+    if (path.isEmpty())
+        return false;
+    if (QFileInfo(path).suffix().isEmpty())
+        path += QStringLiteral(".vp");
+
+    settings.setValue("paths/lastVpDir", QFileInfo(path).absolutePath());
+    return saveTo(path);
+}
+
+namespace {
+
+// The folder at a '/' path such as "data/tables", or -1
+int folderByPath(const VpDocument& document, const QString& path)
+{
+    int folder = VpDocument::RootFolder;
+    for (const QString& part : path.split('/', Qt::SkipEmptyParts)) {
+        folder = document.findFolder(folder, part);
+        if (folder < 0)
+            return -1;
+    }
+    return folder;
+}
+
+} // namespace
+
+// Writes to a temporary file beside the target and swaps it in only when everything was
+// written, so a failed save leaves the old VP as it was. The VP then reloads from the new
+// file, which also clears the undo history.
+bool MainWindow::saveTo(const QString& path)
+{
+    const VpWriter::Problems problems = VpWriter::check(*m_document);
+    if (!problems.errors.isEmpty()) {
+        QMessageBox box(QMessageBox::Warning, tr("Save"),
+            tr("The VP cannot be saved until %n problem(s) are fixed.", nullptr, int(problems.errors.size())),
+            QMessageBox::Ok, this);
+        box.setDetailedText(problems.errors.join('\n'));
+        box.exec();
+        return false;
+    }
+    if (!problems.warnings.isEmpty()) {
+        QMessageBox box(QMessageBox::Question, tr("Save"),
+            tr("%n thing(s) may not work as expected in the game. Save anyway?", nullptr, int(problems.warnings.size())),
+            QMessageBox::Save | QMessageBox::Cancel, this);
+        box.setDetailedText(problems.warnings.join('\n'));
+        if (box.exec() != QMessageBox::Save)
+            return false;
+    }
+
+    waitForPreviewLoad();
+    const QString folderPath = m_currentFolder > VpDocument::RootFolder ? m_document->folderPath(m_currentFolder) : QString();
+    const bool sameFile = m_document->archive() && QFileInfo(m_document->path()) == QFileInfo(path);
+
+    QProgressDialog progress(tr("Saving..."), tr("Cancel"), 0, m_document->fileCount(), this);
+    progress.setWindowTitle(tr("Save"));
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(500);
+
+    VpWriter writer(path);
+    const bool written = writer.write(*m_document, [&](int done, int, const QString& file) {
+        progress.setValue(done);
+        if (!file.isEmpty())
+            progress.setLabelText(tr("Saving %1").arg(QDir::toNativeSeparators(file)));
+        return !progress.wasCanceled();
+    });
+    progress.reset();
+
+    if (!written) {
+        if (writer.wasCanceled())
+            statusBar()->showMessage(tr("Save canceled"));
+        else
+            QMessageBox::warning(this, tr("Save"), writer.errorString());
+        return false;
+    }
+
+    // Windows will not replace a file that is open, so let go of the VP being saved over
+    if (sameFile)
+        m_document->archive()->close();
+
+    if (!writer.commit()) {
+        // The old VP is untouched; reopen it so the unsaved edits can still read from it
+        if (sameFile)
+            m_document->archive()->open(path);
+        QMessageBox::warning(this, tr("Save"), writer.errorString());
+        return false;
+    }
+
+    loadVp(path);
+
+    // Back to the folder the user was in
+    if (m_document && !folderPath.isEmpty()) {
+        const QModelIndex index = m_folderModel->indexOf(folderByPath(*m_document, folderPath));
+        if (index.isValid()) {
+            ui->folderTree->setCurrentIndex(index);
+            ui->folderTree->scrollTo(index);
+        }
+    }
+    statusBar()->showMessage(tr("Saved %1").arg(QDir::toNativeSeparators(path)));
+    return true;
+}
+
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    if (!maybeSave()) {
+        event->ignore();
+        return;
+    }
+
     // Lets the pop-out save its geometry
     if (m_previewWindow)
         m_previewWindow->close();
@@ -329,19 +528,35 @@ void MainWindow::setupModels()
     m_previewSpinnerTimer->setInterval(150);
     connect(m_previewSpinnerTimer, &QTimer::timeout, this, &MainWindow::showPreviewSpinner);
 
-    // Right-click menus reuse the main actions
-    auto* separator = new QAction(this);
-    separator->setSeparator(true);
+    // Right-click menus. Rename and Delete act on the files when the list has focus and on
+    // the folder when the tree does, so their F2 and Del shortcuts work in both.
+    auto separator = [this] {
+        auto* action = new QAction(this);
+        action->setSeparator(true);
+        return action;
+    };
     ui->fileList->setContextMenuPolicy(Qt::ActionsContextMenu);
-    ui->fileList->addActions({ ui->actionOpen, ui->actionOpenWith, separator, ui->actionExtractToDir });
+    ui->fileList->addActions({ ui->actionOpen, ui->actionOpenWith, separator(), ui->actionExtractToDir, separator(),
+        ui->actionAddFiles, ui->actionAddFolder, ui->actionNewFolder, separator(), ui->actionRename, ui->actionDelete });
     ui->folderTree->setContextMenuPolicy(Qt::ActionsContextMenu);
-    ui->folderTree->addAction(ui->actionExtractToDir);
+    ui->folderTree->addActions({ ui->actionExtractToDir, separator(),
+        ui->actionAddFiles, ui->actionAddFolder, ui->actionNewFolder, separator(), ui->actionRename, ui->actionDelete });
 }
 
 void MainWindow::setupConnections()
 {
     connect(ui->actionLoadVp, &QAction::triggered, this, &MainWindow::onLoadVp);
+    connect(ui->actionNewVp, &QAction::triggered, this, &MainWindow::newVp);
+    connect(ui->actionSave, &QAction::triggered, this, [this] { save(); });
+    connect(ui->actionSaveAs, &QAction::triggered, this, [this] { saveAs(); });
     connect(ui->actionCloseVp, &QAction::triggered, this, &MainWindow::closeVp);
+    connect(ui->actionAddFiles, &QAction::triggered, this, &MainWindow::onAddFiles);
+    connect(ui->actionAddFolder, &QAction::triggered, this, &MainWindow::onAddFolder);
+    connect(ui->actionNewFolder, &QAction::triggered, this, &MainWindow::onNewFolder);
+    connect(ui->actionRename, &QAction::triggered, this, &MainWindow::onRename);
+    connect(ui->actionDelete, &QAction::triggered, this, &MainWindow::onDelete);
+    connect(m_editor, &DocumentEditor::documentChanged, this, &MainWindow::refreshAfterEdit);
+    connect(m_editor->undoStack(), &QUndoStack::cleanChanged, this, &MainWindow::updateTitle);
     connect(ui->actionExit, &QAction::triggered, this, &QWidget::close);
     connect(ui->actionExtractToDir, &QAction::triggered, this, &MainWindow::onExtractToDir);
     connect(ui->actionOptions, &QAction::triggered, this, [this] {
@@ -409,8 +624,9 @@ void MainWindow::updateActions()
     ui->actionOpenWith->setEnabled(hasSelection);
     ui->popOutButton->setEnabled(hasVp);
 
-    // Not wired up yet
-    ui->actionNewVp->setEnabled(false);
+    for (QAction* action : { ui->actionSave, ui->actionSaveAs, ui->actionAddFiles, ui->actionAddFolder,
+             ui->actionNewFolder, ui->actionRename, ui->actionDelete })
+        action->setEnabled(hasVp);
 }
 
 void MainWindow::updatePlaybackButtons()
@@ -821,4 +1037,243 @@ void MainWindow::onAbout()
         tr("<h3>QtVP</h3>"
            "<p>A VP archive viewer and extractor for FreeSpace Open.</p>"
            "<p>Licensed under the GNU GPL v3.</p>"));
+}
+
+// Where added files and new folders go: the folder shown, or the top level for <All files>
+int MainWindow::editFolder() const
+{
+    return m_currentFolder >= 0 ? m_currentFolder : VpDocument::RootFolder;
+}
+
+void MainWindow::onAddFiles()
+{
+    if (!m_document)
+        return;
+
+    QSettings settings;
+    const QStringList paths = QFileDialog::getOpenFileNames(this, tr("Add Files"),
+        settings.value("paths/lastAddDir").toString());
+    if (paths.isEmpty())
+        return;
+
+    settings.setValue("paths/lastAddDir", QFileInfo(paths.first()).absolutePath());
+    m_editor->addPaths(editFolder(), paths);
+}
+
+void MainWindow::onAddFolder()
+{
+    if (!m_document)
+        return;
+
+    QSettings settings;
+    const QString path = QFileDialog::getExistingDirectory(this, tr("Add Folder"),
+        settings.value("paths/lastAddDir").toString());
+    if (path.isEmpty())
+        return;
+
+    settings.setValue("paths/lastAddDir", QFileInfo(path).absolutePath());
+    m_editor->addPaths(editFolder(), { path });
+}
+
+void MainWindow::onNewFolder()
+{
+    if (!m_document)
+        return;
+
+    const int folder = m_editor->newFolder(editFolder());
+    const QModelIndex index = m_folderModel->indexOf(folder);
+    if (index.isValid()) {
+        ui->folderTree->setCurrentIndex(index);
+        ui->folderTree->scrollTo(index);
+    }
+}
+
+// The folder when the tree has focus, otherwise the one selected file
+void MainWindow::onRename()
+{
+    if (!m_document)
+        return;
+
+    if (ui->folderTree->hasFocus()) {
+        if (m_currentFolder > VpDocument::RootFolder)
+            m_editor->renameFolder(m_currentFolder);
+        return;
+    }
+
+    const std::vector<int> selected = selectedEntries();
+    if (selected.size() == 1)
+        m_editor->renameFile(selected.front());
+    else
+        statusBar()->showMessage(tr("Select one file to rename"));
+}
+
+// The folder when the tree has focus, otherwise the selected files. Undo brings them back.
+void MainWindow::onDelete()
+{
+    if (!m_document)
+        return;
+
+    if (ui->folderTree->hasFocus()) {
+        if (m_currentFolder > VpDocument::RootFolder)
+            m_editor->remove({}, { m_currentFolder });
+        return;
+    }
+
+    const std::vector<int> selected = selectedEntries();
+    if (!selected.empty())
+        m_editor->remove(selected, {});
+}
+
+// Rebuilds the tree and list after an edit, undo, or redo, keeping the expanded folders,
+// the folder shown, and the selection wherever they still exist
+void MainWindow::refreshAfterEdit()
+{
+    if (!m_document)
+        return;
+
+    std::vector<int> expanded;
+    collectExpanded(QModelIndex(), expanded);
+    const int folder = m_currentFolder;
+    const std::vector<int> selected = selectedEntries();
+    const int current = m_fileModel->entryAt(m_fileProxy->mapToSource(ui->fileList->currentIndex()));
+
+    m_folderModel->setDocument(m_document.get());
+    for (const int id : expanded) {
+        const QModelIndex index = m_folderModel->indexOf(id);
+        if (index.isValid())
+            ui->folderTree->expand(index);
+    }
+
+    // A reset leaves no current index, so setting one always reloads the list
+    QModelIndex index = folder == FolderTreeModel::AllFiles ? m_folderModel->allFilesIndex() : m_folderModel->indexOf(folder);
+    if (!index.isValid())
+        index = m_folderModel->allFilesIndex();
+    ui->folderTree->setCurrentIndex(index);
+
+    selectFiles(selected, current);
+    updateActions();
+}
+
+void MainWindow::collectExpanded(const QModelIndex& parent, std::vector<int>& folders) const
+{
+    for (int row = 0; row < m_folderModel->rowCount(parent); ++row) {
+        const QModelIndex index = m_folderModel->index(row, 0, parent);
+        if (ui->folderTree->isExpanded(index)) {
+            folders.push_back(m_folderModel->folderAt(index));
+            collectExpanded(index, folders);
+        }
+    }
+}
+
+void MainWindow::selectFiles(const std::vector<int>& files, int current)
+{
+    const QHash<int, int> rows = m_fileModel->rowLookup();
+    const int lastColumn = FileListModel::ColumnCount - 1;
+
+    QItemSelection selection;
+    for (const int file : files) {
+        const auto row = rows.constFind(file);
+        if (row == rows.constEnd())
+            continue;
+        const QModelIndex first = m_fileProxy->mapFromSource(m_fileModel->index(row.value(), 0));
+        if (first.isValid())
+            selection.select(first, first.siblingAtColumn(lastColumn));
+    }
+    ui->fileList->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect);
+
+    const auto row = rows.constFind(current);
+    if (row != rows.constEnd()) {
+        const QModelIndex index = m_fileProxy->mapFromSource(m_fileModel->index(row.value(), 0));
+        ui->fileList->selectionModel()->setCurrentIndex(index, QItemSelectionModel::NoUpdate);
+    }
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    const bool onTree = watched == ui->folderTree->viewport();
+    const bool onList = watched == ui->fileList->viewport();
+    if (onTree || onList) {
+        switch (event->type()) {
+        case QEvent::DragEnter:
+        case QEvent::DragMove:
+            handleViewDrag(onTree, static_cast<QDropEvent*>(event), false);
+            return true;
+        case QEvent::Drop:
+            handleViewDrag(onTree, static_cast<QDropEvent*>(event), true);
+            return true;
+        default:
+            break;
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+// Drags over the folder tree or file list. Files from Explorer are added to the folder
+// under the cursor (tree) or the folder shown (list); VP files can be opened instead; and
+// files dragged from the list onto a folder in the tree move there.
+bool MainWindow::handleViewDrag(bool onTree, QDropEvent* event, bool drop)
+{
+    const QPoint pos = event->position().toPoint();
+    const int folderUnder = onTree ? m_folderModel->folderAt(ui->folderTree->indexAt(pos)) : FolderTreeModel::NoFolder;
+
+    if (event->source() == ui->fileList) {
+        if (!m_document || folderUnder < 0) {
+            event->ignore();
+            return false;
+        }
+        // Copy, so the list does not try to remove anything itself when the drag ends
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+        if (drop) {
+            const std::vector<int> files = selectedEntries();
+            QTimer::singleShot(0, this, [this, files, folderUnder] { m_editor->moveFiles(files, folderUnder); });
+        }
+        return true;
+    }
+
+    QStringList paths;
+    if (!event->source() && event->mimeData()->hasUrls()) {
+        for (const QUrl& url : event->mimeData()->urls()) {
+            if (url.isLocalFile())
+                paths << url.toLocalFile();
+        }
+    }
+    const bool allVps = !paths.isEmpty() && std::all_of(paths.cbegin(), paths.cend(), isVpPath);
+    if (paths.isEmpty() || (!m_document && !allVps)) {
+        event->ignore();
+        return false;
+    }
+
+    event->setDropAction(Qt::CopyAction);
+    event->accept();
+    if (!drop)
+        return true;
+
+    const int folder = onTree ? (folderUnder >= 0 ? folderUnder : VpDocument::RootFolder) : editFolder();
+
+    // After the drop returns, so Explorer is not held up while a question is open
+    QTimer::singleShot(0, this, [this, paths, folder, allVps] {
+        if (allVps) {
+            if (!m_document) {
+                openVp(paths.first());
+                return;
+            }
+            QMessageBox box(QMessageBox::Question, tr("Drop"),
+                tr("Open %1, or add the dropped files to this VP?").arg(QFileInfo(paths.first()).fileName()),
+                QMessageBox::NoButton, this);
+            QPushButton* open = box.addButton(tr("&Open"), QMessageBox::AcceptRole);
+            QPushButton* add = box.addButton(tr("&Add to This VP"), QMessageBox::AcceptRole);
+            box.addButton(QMessageBox::Cancel);
+            box.setDefaultButton(open);
+            box.exec();
+            if (box.clickedButton() == open)
+                openVp(paths.first());
+            else if (box.clickedButton() == add && m_document)
+                m_editor->addPaths(folder, paths);
+            return;
+        }
+        if (m_document)
+            m_editor->addPaths(folder, paths);
+    });
+    return true;
 }

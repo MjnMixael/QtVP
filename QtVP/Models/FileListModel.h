@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractTableModel>
+#include <QHash>
 #include <QList>
 #include <QUrl>
 
@@ -32,6 +33,9 @@ public:
     void setDragProvider(DragProvider provider) { m_dragProvider = std::move(provider); }
 
     int entryAt(const QModelIndex& index) const;
+
+    // Row of each listed entry, for restoring a selection after a rebuild
+    QHash<int, int> rowLookup() const;
 
     int rowCount(const QModelIndex& parent = {}) const override;
     int columnCount(const QModelIndex& parent = {}) const override;

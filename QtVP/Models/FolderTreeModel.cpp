@@ -45,6 +45,18 @@ void FolderTreeModel::setDocument(const VpDocument* document)
                 m_row[children[i]] = first + int(i);
             m_children[f] = std::move(children);
         }
+
+        // Removed folders drop out of their parent's list, taking everything under them along
+        m_inTree.assign(folders.size(), 0);
+        std::vector<int> pending{ VpDocument::RootFolder };
+        while (!pending.empty()) {
+            const int f = pending.back();
+            pending.pop_back();
+            m_inTree[f] = 1;
+            pending.insert(pending.end(), m_children[f].begin(), m_children[f].end());
+        }
+    } else {
+        m_inTree.clear();
     }
     endResetModel();
 }
@@ -122,4 +134,11 @@ QVariant FolderTreeModel::data(const QModelIndex& index, int role) const
     if (role == Qt::ToolTipRole && folder >= 0)
         return tr("%n file(s) including subfolders", nullptr, int(m_document->filesUnder(folder).size()));
     return {};
+}
+
+QModelIndex FolderTreeModel::indexOf(int folder) const
+{
+    if (!m_document || folder <= VpDocument::RootFolder || folder >= int(m_inTree.size()) || !m_inTree[folder])
+        return {};
+    return createIndex(m_row[folder], 0, quintptr(folder + 1));
 }

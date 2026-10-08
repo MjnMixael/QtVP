@@ -32,6 +32,9 @@ public:
     // and names that differ only by case in one folder (the engine sees one file)
     static Problems check(const VpDocument& document);
 
+    // Why a file or folder name cannot go in a VP, or empty if it can
+    static QString nameProblem(const QString& name);
+
     explicit VpWriter(const QString& path);
 
     bool write(const VpDocument& document, const ProgressFn& progress = {});
