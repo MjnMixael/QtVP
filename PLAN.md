@@ -46,7 +46,7 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 - Media playback: only one `PreviewWidget` plays through Qt Multimedia at a time (`PreviewWidget::s_mediaOwner`); pressing Play in the pane or the pop-out stops the other. Opening the pop-out stops the pane's media and suspends its autoplay until the pop-out closes (`PreviewWindow::closed`). Movies must use the same owner when they land. Closing the pop-out clears its content, which stops and releases its player; while closed it receives no previews, and reopening it loads the current one.
 - Temp files: drag-out uses a `QTemporaryDir` in `%TEMP%` removed on exit; Open uses `%TEMP%\QtVP\Open\`, kept on exit so editors keep their files. Windows does not clean `%TEMP%` by default (only Storage Sense or Disk Cleanup), so `warmUp()` sweeps Open folders older than a day as a backstop.
 - `Icons` draws the preview buttons' icons (play, pause, stop, pop-out) and the sound placeholder as vector shapes in the palette's text color at paint time, so they follow the theme. The toolbar actions still use Qt standard icons.
-- **Next: user builds and tries movie previews; then LZ41 writing.**
+- **Next: user builds and tries movie previews and .vpc saving; then KTX/ETC2 if wanted, and the app icon once there is artwork.**
 
 ## Working conventions
 
@@ -158,6 +158,6 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 
 ### 6. Later (in progress)
 - Movie previews - written, awaiting build. MP4, WebM, OGV, MKV, AVI, MVE, and Theora `.ogg` (told from Vorbis by "theora" in the first 512 bytes, via `VpFileSource::readHead`). Movies are never read up front: `PreviewContent::Kind::Movie` carries the `VpFileSource`, and on Play `VpFileSource::openDevice` gives the player a seekable device that reads plainly stored entries straight from the VP (`VpArchive::readRaw`); LZ41 entries are decompressed into memory instead. The same player as sounds, with a `QVideoWidget` (`multimediawidgets` in `QtModules`; part of `qtmultimedia` in the release workflow), the one-at-a-time rule, and autoplay. Because playback reads the archive, `setDocument` and saving over the open VP clear the previews first. Local VPs hold 11 Theora OGGs (up to 36 MB) and 12 MP4s (up to 111 MB); MVE depends on Qt's FFmpeg build including the Interplay decoder.
-- Writing LZ41-compressed entries.
+- Writing LZ41-compressed entries - written, awaiting build. The target extension decides: saving to `.vpc` (Save As offers "Compressed VP archives") sets `VpWriter::setCompress`, which compresses every file that gets smaller as LZ41 (64 KB blocks, each compressed independently with `LZ4_compress_default`, offsets relative to the entry plus one past the last block, then count, original size, block size); files already LZ41 are copied, files over 256 MB and files that do not shrink are stored plainly. Saving to `.vp` writes entries as they are, never silently recompressing or decompressing. `VpCheck roundtrip x.vp copy.vpc` compresses and compares contents, and reports the sizes. There is still no real LZ41 VP from another tool to check against, so a `.vpc` written by QtVP should be tried in the game.
 - KTX/ETC2 previews (low priority).
 - App icon, splash logo, and custom toolbar icons (currently Qt's standard icons and a splash drawn in code). Needs the user's artwork.

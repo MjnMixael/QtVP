@@ -1,6 +1,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QFileInfo>
 #include <QTextStream>
 
 #include "Core/VpArchive.h"
@@ -23,7 +24,7 @@ int usage()
            "  VpCheck list <file.vp>\n"
            "  VpCheck verify <file.vp> [more.vp ...]\n"
            "  VpCheck extract <file.vp> <target folder>\n"
-           "  VpCheck roundtrip <file.vp> <copy.vp>\n";
+           "  VpCheck roundtrip <file.vp> <copy.vp>   (a .vpc copy is LZ41-compressed)\n";
     return 2;
 }
 
@@ -129,7 +130,10 @@ int roundtrip(const QString& path, const QString& copyPath)
     if (!problems.errors.isEmpty())
         return 1;
 
+    // A .vpc copy is compressed, so only the contents can match the original
+    const bool compress = QFileInfo(copyPath).suffix().compare("vpc", Qt::CaseInsensitive) == 0;
     VpWriter writer(copyPath);
+    writer.setCompress(compress);
     if (!writer.write(document) || !writer.commit()) {
         err << writer.errorString() << "\n";
         return 1;
@@ -161,7 +165,7 @@ int roundtrip(const QString& path, const QString& copyPath)
         }
         if (copy.entries()[c].timestamp != original.entries()[i].timestamp)
             mismatch(entryPath + ": timestamp differs");
-        if (copy.entries()[c].size != original.entries()[i].size || copy.isCompressed(c) != original.isCompressed(i))
+        if (!compress && (copy.entries()[c].size != original.entries()[i].size || copy.isCompressed(c) != original.isCompressed(i)))
             mismatch(entryPath + ": stored size or compression differs");
 
         QString errorA;
@@ -170,8 +174,14 @@ int roundtrip(const QString& path, const QString& copyPath)
             mismatch(entryPath + ": contents differ");
     }
 
-    out << QDir::toNativeSeparators(copyPath) << ": " << copy.entries().size() << " files, "
-        << copy.folders().size() - 1 << " folders, " << mismatches << " mismatches\n";
+    int compressedCount = 0;
+    for (int i = 0; i < int(copy.entries().size()); ++i)
+        compressedCount += copy.isCompressed(i) ? 1 : 0;
+
+    out << QDir::toNativeSeparators(copyPath) << ": " << copy.entries().size() << " files ("
+        << compressedCount << " LZ41), " << copy.folders().size() - 1 << " folders, "
+        << QFileInfo(copyPath).size() << " bytes (original " << QFileInfo(path).size() << "), "
+        << mismatches << " mismatches\n";
     return mismatches == 0 ? 0 : 1;
 }
 

@@ -37,6 +37,10 @@ public:
 
     explicit VpWriter(const QString& path);
 
+    // Compress every file that gets smaller as LZ41, as for a .vpc. Files already
+    // LZ41 are copied as they are. Off by default: entries are written as stored.
+    void setCompress(bool compress) { m_compress = compress; }
+
     bool write(const VpDocument& document, const ProgressFn& progress = {});
     bool commit();
     void cancel();
@@ -48,4 +52,5 @@ private:
     QSaveFile m_file;
     QString m_error;
     bool m_canceled = false;
+    bool m_compress = false;
 };

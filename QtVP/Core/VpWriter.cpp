@@ -7,6 +7,9 @@
 
 #include <cstring>
 #include <functional>
+#include <vector>
+
+#include "Dependencies/lz4/lz4.h"
 
 namespace {
 
@@ -26,6 +29,41 @@ void appendU32(QByteArray& out, quint32 value)
     char bytes[4];
     qToLittleEndian(value, bytes);
     out.append(bytes, 4);
+}
+
+constexpr int Lz41BlockSize = 64 * 1024;
+
+// Larger files are stored as they are rather than compressed in memory
+constexpr qint64 MaxCompressSize = 256 * 1024 * 1024;
+
+// The LZ41 layout the engine reads: "LZ41", blocks compressed independently (so the
+// engine can seek within a file), the offset of each block plus one past the last,
+// then the offset count, the original size, and the block size. Empty if it is not
+// smaller than the original, which is then better stored as it is.
+QByteArray compressLz41(const QByteArray& data)
+{
+    QByteArray out("LZ41", 4);
+    std::vector<quint32> offsets;
+    std::vector<char> block(size_t(LZ4_compressBound(Lz41BlockSize)));
+
+    for (qsizetype pos = 0; pos < data.size(); pos += Lz41BlockSize) {
+        const int length = int(std::min<qsizetype>(Lz41BlockSize, data.size() - pos));
+        const int compressed = LZ4_compress_default(data.constData() + pos, block.data(), length, int(block.size()));
+        if (compressed <= 0)
+            return QByteArray();
+        offsets.push_back(quint32(out.size()));
+        out.append(block.data(), compressed);
+        if (out.size() >= data.size())
+            return QByteArray();
+    }
+    offsets.push_back(quint32(out.size()));
+
+    for (const quint32 offset : offsets)
+        appendU32(out, offset);
+    appendU32(out, quint32(offsets.size()));
+    appendU32(out, quint32(data.size()));
+    appendU32(out, Lz41BlockSize);
+    return out.size() < data.size() ? out : QByteArray();
 }
 
 } // namespace
@@ -156,9 +194,23 @@ bool VpWriter::write(const VpDocument& document, const ProgressFn& progress)
                 return true;
             };
 
-            // Entries from the open VP go across exactly as stored
-            const bool ok = f.source.fromArchive() ? f.source.archive->streamRaw(f.source.entry, sink, &error)
-                                                   : f.source.stream(sink, &error);
+            // Entries from the open VP go across exactly as stored, unless compressing
+            // a plain one; files from disk are copied, or compressed
+            const bool alreadyLz41 = f.source.fromArchive() && f.source.archive->isCompressed(f.source.entry);
+            bool ok = false;
+            if (m_compress && !alreadyLz41) {
+                const QByteArray data = f.source.read(&error);
+                ok = error.isEmpty();
+                if (ok) {
+                    const QByteArray packed = data.size() <= MaxCompressSize ? compressLz41(data) : QByteArray();
+                    const QByteArray& chosen = packed.isEmpty() ? data : packed;
+                    ok = sink(chosen.constData(), chosen.size());
+                }
+            } else if (f.source.fromArchive()) {
+                ok = f.source.archive->streamRaw(f.source.entry, sink, &error);
+            } else {
+                ok = f.source.stream(sink, &error);
+            }
             if (!ok) {
                 m_error = tr("%1: %2").arg(path, writeError.isEmpty() ? error : writeError);
                 return false;

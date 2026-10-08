@@ -383,11 +383,15 @@ bool MainWindow::saveAs()
     const QString start = m_document->path().isEmpty()
         ? QDir(settings.value("paths/lastVpDir").toString()).filePath("untitled.vp")
         : m_document->path();
-    QString path = QFileDialog::getSaveFileName(this, tr("Save VP As"), start, tr("VP archives (*.vp)"));
+    // A .vpc is a VP whose files are LZ41-compressed; the extension decides which is written
+    const QString plain = tr("VP archives (*.vp)");
+    const QString compressed = tr("Compressed VP archives (*.vpc)");
+    QString filter = QFileInfo(start).suffix().compare("vpc", Qt::CaseInsensitive) == 0 ? compressed : plain;
+    QString path = QFileDialog::getSaveFileName(this, tr("Save VP As"), start, plain + ";;" + compressed, &filter);
     if (path.isEmpty())
         return false;
     if (QFileInfo(path).suffix().isEmpty())
-        path += QStringLiteral(".vp");
+        path += filter == compressed ? QStringLiteral(".vpc") : QStringLiteral(".vp");
 
     settings.setValue("paths/lastVpDir", QFileInfo(path).absolutePath());
     return saveTo(path);
@@ -441,7 +445,9 @@ bool MainWindow::saveTo(const QString& path)
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(500);
 
+    // Saving to a .vpc compresses every file that gets smaller; a .vp keeps entries as they are
     VpWriter writer(path);
+    writer.setCompress(QFileInfo(path).suffix().compare("vpc", Qt::CaseInsensitive) == 0);
     const bool written = writer.write(*m_document, [&](int done, int, const QString& file) {
         progress.setValue(done);
         if (!file.isEmpty())
