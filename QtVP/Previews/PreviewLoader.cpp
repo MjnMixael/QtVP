@@ -37,6 +37,8 @@ QImage decodeImage(const QString& ext, const QByteArray& data, QString* details,
         image = ImageDecoders::decodeTga(data, details, error);
     } else if (ext == "dds") {
         image = ImageDecoders::decodeDds(data, details, error, size);
+    } else if (ext == "ktx") {
+        image = ImageDecoders::decodeKtx(data, details, error, size);
     } else {
         image = QImage::fromData(data);
         if (image.isNull())
@@ -273,7 +275,7 @@ PreviewContent PreviewLoader::load(const Request& request)
     static const QStringList textTypes{ "tbl", "tbm", "fs2", "fc2", "lua", "sdr", "vert", "frag", "geom",
         "rml", "rcss", "txt", "html" };
     static const QStringList movieTypes{ "mve", "mp4", "webm", "ogv", "mkv", "avi" };
-    static const QStringList previewTypes{ "png", "jpg", "jpeg", "pcx", "tga", "dds", "ani", "eff", "wav", "ogg" };
+    static const QStringList previewTypes{ "png", "jpg", "jpeg", "pcx", "tga", "dds", "ktx", "ani", "eff", "wav", "ogg" };
     if (!previewTypes.contains(ext) && !textTypes.contains(ext) && !movieTypes.contains(ext)) {
         PreviewContent content = PreviewContent::fromMessage(ext.isEmpty()
             ? tr("No preview for files without an extension")
@@ -345,7 +347,7 @@ PreviewLoader::EffInfo PreviewLoader::readEff(const VpDocument& document, int fi
             info.fps = std::max(1, value.toInt());
     }
 
-    static const QStringList frameTypes{ "dds", "pcx", "tga", "png", "jpg" };
+    static const QStringList frameTypes{ "dds", "pcx", "tga", "png", "jpg", "ktx" };
     if (!frameTypes.contains(info.type)) {
         info.error = tr("The EFF file has an unsupported frame type \"%1\".").arg(info.type);
         return info;

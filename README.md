@@ -39,6 +39,7 @@ VpCheck roundtrip <file.vp> <copy.vp>      (a copy named .vpc is LZ41-compressed
 
 - [LZ4](https://github.com/lz4/lz4) 1.10.0 (`lz4.c`, `lz4.h`), BSD 2-Clause. See `QtVP/Dependencies/lz4/LICENSE`.
 - [bcdec](https://github.com/iOrange/bcdec) 0.985 (`bcdec.h`), MIT or Unlicense. The license is at the end of the header.
+- [etcdec](https://github.com/iOrange/etcdec) 0.91 (`etcdec.h`), MIT or Unlicense. The license is at the end of the header.
 
 ## License
 

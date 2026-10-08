@@ -136,6 +136,7 @@
     <ClInclude Include="Previews\PreviewLoader.h" />
     <ClInclude Include="Windows\FileOpener.h" />
     <ClInclude Include="Dependencies\bcdec\bcdec.h" />
+    <ClInclude Include="Dependencies\etcdec\etcdec.h" />
     <ClInclude Include="Dependencies\lz4\lz4.h" />
     <QtUic Include="Forms\MainWindow.ui" />
     <QtUic Include="Forms\OptionsDialog.ui" />

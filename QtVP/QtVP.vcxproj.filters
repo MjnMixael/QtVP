@@ -23,6 +23,9 @@
     <Filter Include="Dependencies\bcdec">
       <UniqueIdentifier>{7C2E9B41-D5A3-4F08-8B6E-0E3F1A9C5D27}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Dependencies\etcdec">
+      <UniqueIdentifier>{4E8B2D60-91C7-4A35-B0F4-6C2D8E1A7F93}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Dependencies\lz4">
       <UniqueIdentifier>{2F6A9D13-7E84-4B0C-B5D2-9A1E3C7F4B68}</UniqueIdentifier>
     </Filter>
@@ -126,6 +129,9 @@
     </ClInclude>
     <ClInclude Include="Dependencies\bcdec\bcdec.h">
       <Filter>Dependencies\bcdec</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\etcdec\etcdec.h">
+      <Filter>Dependencies\etcdec</Filter>
     </ClInclude>
     <ClInclude Include="Dependencies\lz4\lz4.h">
       <Filter>Dependencies\lz4</Filter>

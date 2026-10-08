@@ -11,6 +11,9 @@
 #define BCDEC_IMPLEMENTATION
 #include "Dependencies/bcdec/bcdec.h"
 
+#define ETCDEC_IMPLEMENTATION
+#include "Dependencies/etcdec/etcdec.h"
+
 namespace {
 
 constexpr int MaxDimension = 16384;
@@ -561,6 +564,103 @@ QImage ImageDecoders::decodeDds(const QByteArray& data, QString* details, QStrin
             text += tr(", cubemap");
         if (format.decode && !(isPowerOfTwo(width) && isPowerOfTwo(height)))
             text += tr(" (not a power of two, so the engine will not load it)");
+        *details = text;
+    }
+    return result;
+}
+
+// KTX1 layout: a 64-byte header (identifier, endianness, GL type and format fields,
+// size, array, face, and mipmap counts, key/value length), the key/value data, then for
+// each mipmap a 4-byte image size followed by each face's data. ETC blocks are 8 or 16
+// bytes, so faces never need the 4-byte padding the format allows for.
+QImage ImageDecoders::decodeKtx(const QByteArray& data, QString* details, QString* error, QSize* faceSize)
+{
+    static const char Ktx1Id[12] = { '\xAB', 'K', 'T', 'X', ' ', '1', '1', '\xBB', '\r', '\n', '\x1A', '\n' };
+    static const char Ktx2Id[12] = { '\xAB', 'K', 'T', 'X', ' ', '2', '0', '\xBB', '\r', '\n', '\x1A', '\n' };
+    constexpr int HeaderSize = 64;
+
+    if (data.size() >= 12 && std::memcmp(data.constData(), Ktx2Id, 12) == 0)
+        return fail(error, tr("KTX2 files are not supported; the engine reads KTX1."));
+    if (data.size() < HeaderSize || std::memcmp(data.constData(), Ktx1Id, 12) != 0)
+        return fail(error, tr("Not a KTX file."));
+
+    const uchar* p = reinterpret_cast<const uchar*>(data.constData());
+    if (readU32(p + 12) != 0x04030201)
+        return fail(error, tr("Big-endian KTX files are not supported."));
+
+    const quint32 glType = readU32(p + 16);
+    const quint32 glFormat = readU32(p + 24);
+    const quint32 internalFormat = readU32(p + 28);
+    const quint32 width = readU32(p + 36);
+    const quint32 height = readU32(p + 40);
+    const quint32 depth = readU32(p + 44);
+    const quint32 arrays = readU32(p + 48);
+    const quint32 faces = readU32(p + 52);
+    const quint32 mipCount = std::max(1u, readU32(p + 56));
+    const quint32 keyValueBytes = readU32(p + 60);
+
+    if (width == 0 || height == 0 || width > MaxDimension || height > MaxDimension)
+        return fail(error, tr("The KTX header has invalid dimensions."));
+    if (depth > 1 || arrays > 0)
+        return fail(error, tr("KTX texture arrays and 3D textures are not supported."));
+    if (faces != 1 && faces != 6)
+        return fail(error, tr("The KTX header lists %1 faces.").arg(faces));
+    if (glType != 0 || glFormat != 0)
+        return fail(error, tr("Uncompressed KTX images are not supported; the engine reads only ETC2."));
+
+    // The engine reads the six ETC2 formats; ETC1 is shown too, since ETC2 decodes it
+    DdsFormat format;
+    bool engineFormat = true;
+    auto use = [&](const QString& name, BlockDecoder decode, int blockSize) {
+        format.name = name;
+        format.decode = decode;
+        format.blockSize = blockSize;
+    };
+    switch (internalFormat) {
+    case 0x8D64: use("ETC1", etcdec_etc_rgb, ETCDEC_ETC_RGB_BLOCK_SIZE); engineFormat = false; break;
+    case 0x9274: use("ETC2 RGB", etcdec_etc_rgb, ETCDEC_ETC_RGB_BLOCK_SIZE); break;
+    case 0x9275: use(tr("ETC2 RGB sRGB"), etcdec_etc_rgb, ETCDEC_ETC_RGB_BLOCK_SIZE); break;
+    case 0x9276: use(tr("ETC2 RGB with 1-bit alpha"), etcdec_etc_rgb_a1, ETCDEC_ETC_RGB_A1_BLOCK_SIZE); break;
+    case 0x9277: use(tr("ETC2 RGB with 1-bit alpha, sRGB"), etcdec_etc_rgb_a1, ETCDEC_ETC_RGB_A1_BLOCK_SIZE); break;
+    case 0x9278: use(tr("ETC2 RGBA (EAC alpha)"), etcdec_eac_rgba, ETCDEC_EAC_RGBA_BLOCK_SIZE); break;
+    case 0x9279: use(tr("ETC2 RGBA (EAC alpha), sRGB"), etcdec_eac_rgba, ETCDEC_EAC_RGBA_BLOCK_SIZE); break;
+    default:
+        return fail(error, tr("Unsupported KTX format 0x%1.").arg(internalFormat, 0, 16));
+    }
+
+    // The top mipmap comes first: its size, then each face
+    qint64 offset = qint64(HeaderSize) + keyValueBytes;
+    if (offset + 4 > data.size())
+        return fail(error, tr("The KTX image data ends early."));
+    const quint32 imageSize = readU32(p + offset);
+    offset += 4;
+
+    const qint64 faceBytes = qint64((width + 3) / 4) * ((height + 3) / 4) * format.blockSize;
+    if (imageSize < faceBytes || offset + qint64(faces) * faceBytes > data.size())
+        return fail(error, tr("The KTX image data ends early."));
+
+    std::vector<QImage> images;
+    for (quint32 face = 0; face < faces; ++face) {
+        const QImage image = decodeBlocks(p + offset + face * faceBytes, int(width), int(height), format);
+        if (image.isNull())
+            return fail(error, tr("Not enough memory for a %1 x %2 image.").arg(width).arg(height));
+        images.push_back(image);
+    }
+
+    const bool cube = faces == 6;
+    const QImage result = cube ? cubeCross(images) : dropOpaqueAlpha(images.front());
+    if (result.isNull())
+        return fail(error, tr("Not enough memory for the cubemap."));
+
+    if (faceSize)
+        *faceSize = QSize(int(width), int(height));
+    if (details) {
+        QString text = format.name;
+        text += mipCount > 1 ? tr(", %1 mipmaps").arg(mipCount) : tr(", no mipmaps");
+        if (cube)
+            text += tr(", cubemap (the engine does not load KTX cubemaps)");
+        if (!engineFormat)
+            text += tr(" (the engine reads only ETC2)");
         *details = text;
     }
     return result;

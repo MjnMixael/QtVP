@@ -16,4 +16,7 @@ QImage decodeTga(const QByteArray& data, QString* details, QString* error);
 // *faceSize set to one face's size (otherwise it is the image size).
 QImage decodeDds(const QByteArray& data, QString* details, QString* error, QSize* faceSize);
 
+// KTX1 with ETC1 or ETC2 data, the KTX the engine reads. Same conventions as decodeDds.
+QImage decodeKtx(const QByteArray& data, QString* details, QString* error, QSize* faceSize);
+
 } // namespace ImageDecoders
