@@ -181,6 +181,14 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     setContent(PreviewContent::fromMessage(tr("Select a file to preview")));
 }
 
+PreviewWidget* PreviewWidget::s_mediaOwner = nullptr;
+
+PreviewWidget::~PreviewWidget()
+{
+    if (s_mediaOwner == this)
+        s_mediaOwner = nullptr;
+}
+
 void PreviewWidget::setContent(const PreviewContent& content)
 {
     stopAndClear();
@@ -274,10 +282,15 @@ void PreviewWidget::togglePlay()
             m_player->setSourceDevice(m_audioBuffer, QUrl(m_audioName));
             m_audioLoaded = true;
         }
-        if (m_player->playbackState() == QMediaPlayer::PlayingState)
+        if (m_player->playbackState() == QMediaPlayer::PlayingState) {
             m_player->pause();
-        else
+        } else {
+            // The pane and the pop-out each have a player; never let both be heard
+            if (s_mediaOwner && s_mediaOwner != this)
+                s_mediaOwner->stop();
+            s_mediaOwner = this;
             m_player->play();
+        }
         return;
     }
 
@@ -350,6 +363,8 @@ void PreviewWidget::clearSound()
     m_audio.clear();
     m_audioName.clear();
     m_audioLoaded = false;
+    if (s_mediaOwner == this)
+        s_mediaOwner = nullptr;
 }
 
 void PreviewWidget::updateSoundPosition()

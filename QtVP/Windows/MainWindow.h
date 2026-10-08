@@ -53,6 +53,7 @@ private:
     void updatePlaybackButtons();
     void resetPreview();
     void openPreviewWindow();
+    bool previewWindowOpen() const;
     void startPreviewLoad();
     void onPreviewLoaded();
     void showPreviewSpinner();

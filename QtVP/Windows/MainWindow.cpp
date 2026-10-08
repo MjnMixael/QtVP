@@ -461,7 +461,7 @@ void MainWindow::showPreviewSpinner()
     const QString name = m_archive->entries()[m_previewEntry].name;
     m_previewSpinnerShown = true;
     ui->previewArea->setLoading(name);
-    if (m_previewWindow)
+    if (previewWindowOpen())
         m_previewWindow->setLoading(name);
 }
 
@@ -471,7 +471,7 @@ void MainWindow::showPreview(const PreviewContent& content)
     m_previewSpinnerShown = false;
     m_preview = content;
     ui->previewArea->setContent(m_preview);
-    if (m_previewWindow)
+    if (previewWindowOpen())
         m_previewWindow->setContent(m_preview);
 }
 
@@ -491,10 +491,18 @@ void MainWindow::waitForPreviewLoad()
     m_previewWatcher->waitForFinished();
 }
 
+// A closed pop-out is hidden and empty; it gets nothing until it opens again
+bool MainWindow::previewWindowOpen() const
+{
+    return m_previewWindow && m_previewWindow->isVisible();
+}
+
 void MainWindow::openPreviewWindow()
 {
-    if (!m_previewWindow) {
+    if (!m_previewWindow)
         m_previewWindow = new PreviewWindow(this);
+
+    if (!m_previewWindow->isVisible()) {
         if (m_previewSpinnerShown)
             m_previewWindow->setLoading(m_archive->entries()[m_previewEntry].name);
         else

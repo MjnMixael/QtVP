@@ -64,6 +64,7 @@ class PreviewWidget : public QFrame
 
 public:
     explicit PreviewWidget(QWidget* parent = nullptr);
+    ~PreviewWidget() override;
 
     void setContent(const PreviewContent& content);
 
@@ -106,6 +107,9 @@ private:
     std::vector<QImage> m_frames;
     std::vector<int> m_durations;
     size_t m_frame = 0;
+
+    // Only one preview plays media at a time; starting one stops the other
+    static PreviewWidget* s_mediaOwner;
 
     // Created on first use; the source is only set when Play is pressed
     QMediaPlayer* m_player = nullptr;

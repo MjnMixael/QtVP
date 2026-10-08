@@ -58,8 +58,11 @@ void PreviewWindow::setLoading(const QString& title)
     setWindowTitle(tr("Preview - %1").arg(title));
 }
 
+// Closing only hides the window, so stop and drop whatever it holds; a sound would
+// otherwise keep playing with no visible way to stop it
 void PreviewWindow::closeEvent(QCloseEvent* event)
 {
+    m_preview->setContent(PreviewContent());
     QSettings().setValue("window/previewGeometry", saveGeometry());
     event->accept();
 }
