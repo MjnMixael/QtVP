@@ -19,11 +19,11 @@ QtVP keeps the familiar VPView32 layout (folder tree, file list, resizable previ
 
 Requirements:
 
-- Visual Studio 2022 (v143 toolset)
+- Visual Studio 2026 (v145 toolset)
 - Qt 6.8.3 (msvc2022_64), registered in Qt VS Tools as `6.8.3_msvc2022_64`
 - Qt VS Tools extension
 
-Open `QtVP.sln` and build `Release|x64`.
+Open `QtVP.slnx` and build `Release|x64`.
 
 ## License
 

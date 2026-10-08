@@ -7,7 +7,7 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 - Keep the VPView32 layout: folder tree with file counts and an `<All files>` node, a sortable file list, a resizable preview pane under the tree, and a toolbar with Load / Extract / Options.
 - Preview support targets parity with what the FSO engine loads, not every format in existence.
 - No feature creep. Things other community VP tools bolt on (mod managers, model editors, etc.) are out of scope.
-- Setup matches AnimStudio and Etemenanki: Visual Studio solution, Qt VS Tools project, Qt 6.8.3 msvc2022_64, v143, C++17, GPLv3, tag-triggered release workflow.
+- Setup follows AnimStudio and Etemenanki: Qt VS Tools project, Visual Studio 2026 (.slnx, v145 toolset), Qt 6.8.3 msvc2022_64 (ABI-compatible with v145), C++17, GPLv3, tag-triggered release workflow.
 
 ## VP format reference
 

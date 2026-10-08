@@ -17,7 +17,7 @@ permissions:
 jobs:
   windows:
     name: Windows (x64)
-    runs-on: windows-2022
+    runs-on: windows-2025   # VS 2026 (v145) image since June 2026
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,7 +61,7 @@ jobs:
           # QT_ROOT_DIR is exported by install-qt-action and points at the Qt
           # install. QtMsBuild accepts a full path in QtInstall, bypassing the
           # machine-registered-version lookup that the local .vcxproj relies on.
-          msbuild QtVP.sln `
+          msbuild QtVP.slnx `
             /m `
             /p:Configuration=Release `
             /p:Platform=x64 `
