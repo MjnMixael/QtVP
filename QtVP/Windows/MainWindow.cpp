@@ -4,6 +4,7 @@
 #include "Core/VpArchive.h"
 #include "Models/FileListModel.h"
 #include "Models/FolderTreeModel.h"
+#include "Windows/OptionsDialog.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -172,6 +173,7 @@ void MainWindow::setupIcons()
     ui->actionLoadVp->setIcon(s->standardIcon(QStyle::SP_DialogOpenButton));
     ui->actionNewVp->setIcon(s->standardIcon(QStyle::SP_FileIcon));
     ui->actionExtractToDir->setIcon(s->standardIcon(QStyle::SP_DirOpenIcon));
+    ui->actionOptions->setIcon(s->standardIcon(QStyle::SP_FileDialogDetailedView));
 
     ui->playButton->setIcon(s->standardIcon(QStyle::SP_MediaPlay));
     ui->stopButton->setIcon(s->standardIcon(QStyle::SP_MediaStop));
@@ -217,6 +219,7 @@ void MainWindow::setupConnections()
     connect(ui->actionCloseVp, &QAction::triggered, this, &MainWindow::closeVp);
     connect(ui->actionExit, &QAction::triggered, this, &QWidget::close);
     connect(ui->actionExtractToDir, &QAction::triggered, this, &MainWindow::onExtractToDir);
+    connect(ui->actionOptions, &QAction::triggered, this, [this] { OptionsDialog(this).exec(); });
     connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::onAbout);
     connect(ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
     connect(ui->actionFind, &QAction::triggered, this, [this] {

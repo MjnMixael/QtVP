@@ -13,6 +13,7 @@ QtVP keeps the familiar VPView32 layout (folder tree, file list, resizable previ
 - Preview images (PCX, TGA, DDS, PNG, JPG), animations (ANI, EFF, APNG), and sounds (WAV, OGG)
 - Create and edit VPs: add, remove, rename, and save
 - Read compressed (LZ41) VP entries
+- Light and dark themes, or follow the system
 
 ## Building
 

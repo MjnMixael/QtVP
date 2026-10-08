@@ -103,20 +103,25 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Theme.cpp" />
     <ClCompile Include="Core\VpArchive.cpp" />
     <ClCompile Include="Models\FileListModel.cpp" />
     <ClCompile Include="Models\FolderTreeModel.cpp" />
     <ClCompile Include="Windows\MainWindow.cpp" />
+    <ClCompile Include="Windows\OptionsDialog.cpp" />
     <ClCompile Include="Dependencies\lz4\lz4.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
       <SDLCheck>false</SDLCheck>
     </ClCompile>
+    <ClInclude Include="Theme.h" />
     <ClInclude Include="Core\VpArchive.h" />
     <ClInclude Include="Dependencies\lz4\lz4.h" />
     <QtUic Include="Forms\MainWindow.ui" />
+    <QtUic Include="Forms\OptionsDialog.ui" />
     <QtMoc Include="Models\FileListModel.h" />
     <QtMoc Include="Models\FolderTreeModel.h" />
     <QtMoc Include="Windows\MainWindow.h" />
+    <QtMoc Include="Windows\OptionsDialog.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

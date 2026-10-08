@@ -4,7 +4,7 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 
 ## Ground rules
 
-- Keep the VPView32 layout: folder tree with file counts and an `<All files>` node, a sortable file list, a resizable preview pane under the tree, and a toolbar with Load / Extract.
+- Keep the VPView32 layout: folder tree with file counts and an `<All files>` node, a sortable file list, a resizable preview pane under the tree, and a toolbar with Load / Extract / Options.
 - Preview support targets parity with what the FSO engine loads, not every format in existence.
 - No feature creep. Things other community VP tools bolt on (mod managers, model editors, etc.) are out of scope.
 - Setup follows AnimStudio and Etemenanki: Qt VS Tools project, Visual Studio 2026 (.slnx, v145 toolset), Qt 6.8.3 msvc2022_64 (ABI-compatible with v145), C++17, GPLv3, tag-triggered release workflow.
@@ -25,14 +25,14 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 
 - Phase 1 is done (`658fb96`, `1299112`). Phase 2 is done (`644f2e3`); the user confirmed VPs open and report their file count.
 - Phase 3 is done; the user confirmed browsing, filtering, extraction, and drag-out work.
-- Files: `main.cpp` (opens a `.vp` passed on the command line), `Core\VpArchive.{h,cpp}`, `Models\FolderTreeModel.{h,cpp}`, `Models\FileListModel.{h,cpp}`, `Windows\MainWindow.{h,cpp}`, `Forms\MainWindow.ui`, `Dependencies\lz4\` (upstream LZ4 1.10.0, `lz4.c`/`lz4.h`/`LICENSE` only).
+- Files: `main.cpp` (applies the saved theme, opens a `.vp` passed on the command line), `Theme.{h,cpp}`, `Core\VpArchive.{h,cpp}`, `Models\FolderTreeModel.{h,cpp}`, `Models\FileListModel.{h,cpp}`, `Windows\MainWindow.{h,cpp}`, `Windows\OptionsDialog.{h,cpp}`, `Forms\MainWindow.ui`, `Forms\OptionsDialog.ui`, `Dependencies\lz4\` (upstream LZ4 1.10.0, `lz4.c`/`lz4.h`/`LICENSE` only).
 - `MainWindow` owns a `std::unique_ptr<VpArchive>`. `openVp()` parses into a fresh archive and only replaces the current one on success; failures show a message box with `errorString()`, and `warnings()` go to the status bar. The models hold a raw archive pointer, so they are always set to nullptr before an archive is destroyed.
 - `FolderTreeModel`: `<All files> (N)` first, then the folders alphabetized, each showing its direct file count (the tooltip has the recursive count). Internal id is folder index + 1; 0 is `<All files>`.
 - `FileListModel` sits behind a `QSortFilterProxyModel`: Name, Folder (only shown for `<All files>`), Type, Size (stored bytes), Date & Time. `SortRole` gives raw numbers. `mimeData()` calls a drag provider in `MainWindow` that extracts to a temp folder.
 - `VpCheck\` is a second project in the solution: a console harness over the same `VpArchive.cpp` and `lz4.c` with `list`, `verify` (reads and decompresses every entry), and `extract`. Not shipped by the release workflow.
-- Widgets in the .ui: `mainSplitter` (horizontal) holding `leftSplitter` (vertical: `folderTree` QTreeView, `previewPane` with `playButton`/`stopButton`/`popOutButton` and the `previewArea` QLabel) and `filePane` (`filterEdit` QLineEdit above `fileList` QTreeView: multi-select, sortable, drag-only). Actions: `actionLoadVp`, `actionNewVp`, `actionCloseVp`, `actionExit`, `actionExtractToDir`, `actionFind` (Ctrl+F, focuses the filter), `actionAbout`, `actionAboutQt`. Menus: File, Action, Help. The Recent VPs submenu is built in code.
+- Widgets in the .ui: `mainSplitter` (horizontal) holding `leftSplitter` (vertical: `folderTree` QTreeView, `previewPane` with `playButton`/`stopButton`/`popOutButton` and the `previewArea` QLabel) and `filePane` (`filterEdit` QLineEdit above `fileList` QTreeView: multi-select, sortable, drag-only). Actions: `actionLoadVp`, `actionNewVp`, `actionCloseVp`, `actionExit`, `actionExtractToDir`, `actionFind` (Ctrl+F, focuses the filter), `actionOptions`, `actionAbout`, `actionAboutQt`. Menus: File, Action, Tools, Help. The Recent VPs submenu is built in code.
 - `updateActions()` force-disables everything that is not wired up yet (New VP, preview buttons); enable each piece as it lands.
-- `QSettings` (org and app name both `QtVP`): `window/*` for geometry, splitters, and the file list header; `paths/lastVpDir`, `paths/lastExtractDir`; `recentFiles` (up to 10, native paths).
+- `QSettings` (org and app name both `QtVP`): `window/*` for geometry, splitters, and the file list header; `paths/lastVpDir`, `paths/lastExtractDir`; `appearance/theme` (`system`, `light`, `dark`); `recentFiles` (up to 10, native paths).
 - Icons are Qt standard icons (`QStyle::standardIcon`). No app icon or `.rc` file yet.
 - The release workflow has not run yet. No version tag exists.
 - **Next: Phase 4 (previews).**
@@ -65,7 +65,8 @@ The pieces are in `E:\AnimStudio\AnimStudio`. AnimStudio is the user's own GPL p
 - Knossos: AnimStudio's release workflow also opens a PR against KnossosNET/Knet-Tool-Repo. Left out of QtVP's workflow until QtVP is listed there; copy that job from `E:\AnimStudio\.github\workflows\release.yml` when it is.
 - Drag-out to Explorer: extract the dragged entries to a temp folder when the drag starts and hand Explorer file URLs. Simple and fine for the "a few files" case. Each drag gets its own numbered subfolder of one `QTemporaryDir` (removed on exit); same-named files from different folders go in `~N` subfolders. Drags back onto QtVP itself are ignored.
 - What the extract actions act on: the selected files, or the whole current folder (with subfolders) when nothing is selected or the folder tree has focus (so right-clicking a folder extracts the folder). Selected files land directly in the target folder, except from `<All files>`, where they keep their full VP paths. An extracted folder is recreated under the target.
-- No "Extract to FS Data Folder". VPView32 had it, but with how mods are laid out now it is niche and full of edge cases, so it was dropped (user decision, 2026-10-08) along with the Options dialog and Tools menu that only existed for it. Do not bring it back. Add an Options dialog again only when there is a real setting for it.
+- No "Extract to FS Data Folder". VPView32 had it, but with how mods are laid out now it is niche and full of edge cases, so it was dropped (user decision, 2026-10-08). Do not bring it back.
+- Options dialog (Tools > Options, also on the toolbar) is the home for app settings. Its first setting is Theme: System default, Light, or Dark, applied on OK and at startup through `QStyleHints::setColorScheme` (Qt 6.8). The Windows 11 style handles both schemes itself; the Windows 10 style (`windowsvista`) has no dark palette, so `Theme` swaps in Fusion while dark is in effect and swaps back for light. The theme is untested on Windows 10.
 - Existing files: one prompt per extraction (Overwrite / Skip Existing / Cancel). Errors are collected and shown together with details; cancel stops between files. Extraction runs on the UI thread with a modal `QProgressDialog`; move it to a worker thread if very large single entries make the UI stall.
 - Filter box: plain text matches anywhere in the name, `*`/`?` wildcards match whole names, `;` separates patterns. Filters the current list only; pick `<All files>` to search the whole VP.
 - The preview pane must stay resizable (VPView32's is). The pop-out window is an addition, not a replacement.

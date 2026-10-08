@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QFileInfo>
 
+#include "Theme.h"
 #include "Windows/MainWindow.h"
 
 int main(int argc, char* argv[])
@@ -8,6 +9,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("QtVP");
     QCoreApplication::setApplicationName("QtVP");
+    Theme::apply(Theme::saved());
 
     MainWindow window;
     window.show();

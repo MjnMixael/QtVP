@@ -228,6 +228,12 @@
     <addaction name="separator"/>
     <addaction name="actionFind"/>
    </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>&amp;Tools</string>
+    </property>
+    <addaction name="actionOptions"/>
+   </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
      <string>&amp;Help</string>
@@ -237,6 +243,7 @@
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuAction"/>
+   <addaction name="menuTools"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QToolBar" name="mainToolBar">
@@ -258,6 +265,8 @@
    <addaction name="actionLoadVp"/>
    <addaction name="separator"/>
    <addaction name="actionExtractToDir"/>
+   <addaction name="separator"/>
+   <addaction name="actionOptions"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
   <action name="actionLoadVp">
@@ -301,6 +310,14 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+E</string>
+   </property>
+  </action>
+  <action name="actionOptions">
+   <property name="text">
+    <string>&amp;Options...</string>
+   </property>
+   <property name="iconText">
+    <string>Options</string>
    </property>
   </action>
   <action name="actionFind">
