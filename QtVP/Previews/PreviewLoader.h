@@ -13,6 +13,7 @@ struct Request
 {
     QString name;
     VpFileSource source;
+    qint64 size = 0;
 
     // For an EFF: its frame type and rate, and the frames' sources in order
     QString effType;

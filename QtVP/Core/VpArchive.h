@@ -91,6 +91,9 @@ public:
     // Feeds the bytes exactly as stored, so LZ41 entries stay compressed
     bool streamRaw(int entry, const Sink& sink, QString* error) const;
 
+    // Up to length stored bytes from pos within the entry; -1 on a read error
+    qint64 readRaw(int entry, qint64 pos, char* dst, qint64 length) const;
+
 private:
     struct Lz41Info
     {

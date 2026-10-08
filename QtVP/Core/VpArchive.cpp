@@ -377,6 +377,19 @@ bool VpArchive::streamRaw(int entry, const Sink& sink, QString* error) const
     return true;
 }
 
+qint64 VpArchive::readRaw(int entry, qint64 pos, char* dst, qint64 length) const
+{
+    QMutexLocker lock(&m_mutex);
+    if (!m_file.isOpen())
+        return -1;
+
+    const VpEntry& e = m_entries[entry];
+    if (pos >= e.size)
+        return 0;
+    const qint64 n = std::min<qint64>(length, e.size - pos);
+    return readAt(qint64(e.offset) + pos, dst, n) ? n : -1;
+}
+
 QByteArray VpArchive::readEntry(int entry, QString* error) const
 {
     QByteArray result;

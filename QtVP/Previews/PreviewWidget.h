@@ -15,6 +15,7 @@ class QMediaPlayer;
 class QPlainTextEdit;
 class QStackedLayout;
 class QTimer;
+class QVideoWidget;
 
 // Draws an image scaled to fit, over a checkerboard where it is transparent.
 // Small images are enlarged by whole multiples so pixels stay sharp.
@@ -71,7 +72,7 @@ public:
     // Clears the current preview and shows a spinner until the next setContent()
     void setLoading(const QString& title);
 
-    bool isPlayable() const { return m_frames.size() > 1 || !m_audio.isEmpty(); }
+    bool isPlayable() const { return m_frames.size() > 1 || hasMedia(); }
     bool isPlaying() const;
 
     void togglePlay();
@@ -83,7 +84,7 @@ public:
     // Creates the sound player now instead of on the first Play
     void prepareAudio();
 
-    // Start sounds (and later movies) as soon as they are shown, instead of waiting for Play
+    // Start sounds and movies as soon as they are shown, instead of waiting for Play
     void setAutoplayMedia(bool autoplay) { m_autoplayMedia = autoplay; }
 
 signals:
@@ -93,6 +94,7 @@ protected:
     void changeEvent(QEvent* event) override;
 
 private:
+    bool hasMedia() const { return !m_audio.isEmpty() || m_hasMovie; }
     void stopAndClear();
     void updateSoundIcon();
     void showFrame(size_t index);
@@ -104,10 +106,11 @@ private:
     QLabel* m_message = nullptr;
     ImageView* m_imageView = nullptr;
     QLabel* m_soundView = nullptr;
+    QVideoWidget* m_videoView = nullptr;
     QPlainTextEdit* m_textView = nullptr;
     BusyIndicator* m_busy = nullptr;
     QLabel* m_info = nullptr;
-    QLabel* m_frameLabel = nullptr;     // frame counter, or sound position
+    QLabel* m_frameLabel = nullptr;     // frame counter, or media position
 
     QTimer* m_timer = nullptr;
     std::vector<QImage> m_frames;
@@ -121,8 +124,11 @@ private:
     QMediaPlayer* m_player = nullptr;
     QAudioOutput* m_audioOutput = nullptr;
     QBuffer* m_audioBuffer = nullptr;
-    QByteArray m_audio;
-    QString m_audioName;
-    bool m_audioLoaded = false;
+    QByteArray m_audio;                 // a sound, played from memory
+    VpFileSource m_movie;               // a movie, streamed through m_mediaDevice
+    bool m_hasMovie = false;
+    QIODevice* m_mediaDevice = nullptr;
+    QString m_mediaName;
+    bool m_mediaLoaded = false;
     bool m_autoplayMedia = false;
 };

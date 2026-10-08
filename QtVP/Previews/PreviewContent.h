@@ -6,10 +6,13 @@
 
 #include <vector>
 
-// What a preview shows. Self-contained, so it stays valid after the archive closes.
+#include "Core/VpDocument.h"
+
+// What a preview shows. Self-contained except for a movie, which still reads from the
+// archive, so previews are cleared before an archive closes.
 struct PreviewContent
 {
-    enum class Kind { Message, Image, Animation, Sound, Text };
+    enum class Kind { Message, Image, Animation, Sound, Text, Movie };
 
     Kind kind = Kind::Message;
     QString title;      // the file name, or empty for a message
@@ -23,6 +26,9 @@ struct PreviewContent
     QByteArray audio;               // the whole file, played from memory
 
     QString text;
+
+    // A movie is not read up front; the player streams it from here
+    VpFileSource movie;
 
     static PreviewContent fromMessage(const QString& text)
     {

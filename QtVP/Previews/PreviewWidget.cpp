@@ -7,12 +7,14 @@
 #include <QEvent>
 #include <QFontDatabase>
 #include <QLabel>
+#include <QMediaMetaData>
 #include <QMediaPlayer>
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QStackedLayout>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QVideoWidget>
 
 #include <algorithm>
 #include <cmath>
@@ -142,6 +144,8 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     m_soundView->setAlignment(Qt::AlignCenter);
     updateSoundIcon();
 
+    m_videoView = new QVideoWidget(this);
+
     m_textView = new QPlainTextEdit(this);
     m_textView->setReadOnly(true);
     m_textView->setLineWrapMode(QPlainTextEdit::NoWrap);
@@ -163,6 +167,7 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     m_stack->addWidget(m_message);
     m_stack->addWidget(m_imageView);
     m_stack->addWidget(m_soundView);
+    m_stack->addWidget(m_videoView);
     m_stack->addWidget(m_textView);
     m_stack->addWidget(m_busy);
 
@@ -203,9 +208,15 @@ void PreviewWidget::setContent(const PreviewContent& content)
             m_timer->start(m_durations[0]);
     } else if (content.kind == PreviewContent::Kind::Sound) {
         m_audio = content.audio;
-        m_audioName = content.title;
+        m_mediaName = content.title;
         m_stack->setCurrentWidget(m_soundView);
         m_frameLabel->setText(tr("Press Play to listen"));
+    } else if (content.kind == PreviewContent::Kind::Movie) {
+        m_movie = content.movie;
+        m_hasMovie = true;
+        m_mediaName = content.title;
+        m_stack->setCurrentWidget(m_videoView);
+        m_frameLabel->setText(tr("Press Play to watch"));
     } else if (content.kind == PreviewContent::Kind::Text) {
         m_textView->setPlainText(content.text);
         m_stack->setCurrentWidget(m_textView);
@@ -222,7 +233,7 @@ void PreviewWidget::setContent(const PreviewContent& content)
     m_frameLabel->setVisible(isPlayable());
     emit playbackChanged();
 
-    if (m_autoplayMedia && !m_audio.isEmpty())
+    if (m_autoplayMedia && hasMedia())
         togglePlay();
 }
 
@@ -276,14 +287,25 @@ void PreviewWidget::togglePlay()
     if (!isPlayable())
         return;
 
-    if (!m_audio.isEmpty()) {
+    if (hasMedia()) {
         prepareAudio();
-        if (!m_audioLoaded) {
-            m_audioBuffer->setData(m_audio);
-            m_audioBuffer->open(QIODevice::ReadOnly);
+        if (!m_mediaLoaded) {
+            QIODevice* device = m_audioBuffer;
+            if (m_hasMovie) {
+                QString error;
+                m_mediaDevice = m_movie.openDevice(this, &error);
+                if (!m_mediaDevice) {
+                    m_frameLabel->setText(tr("Could not read the movie: %1").arg(error));
+                    return;
+                }
+                device = m_mediaDevice;
+            } else {
+                m_audioBuffer->setData(m_audio);
+                m_audioBuffer->open(QIODevice::ReadOnly);
+            }
             // The file name in the URL tells the backend what format to expect
-            m_player->setSourceDevice(m_audioBuffer, QUrl(m_audioName));
-            m_audioLoaded = true;
+            m_player->setSourceDevice(device, QUrl(m_mediaName));
+            m_mediaLoaded = true;
         }
         if (m_player->playbackState() == QMediaPlayer::PlayingState) {
             m_player->pause();
@@ -310,7 +332,7 @@ void PreviewWidget::stop()
     if (!isPlayable())
         return;
 
-    if (!m_audio.isEmpty()) {
+    if (hasMedia()) {
         if (m_player)
             m_player->stop();
         return;
@@ -323,7 +345,7 @@ void PreviewWidget::stop()
 
 void PreviewWidget::stopMedia()
 {
-    if (m_player && !m_audio.isEmpty())
+    if (m_player && hasMedia())
         m_player->stop();
 }
 
@@ -350,36 +372,55 @@ void PreviewWidget::prepareAudio()
     m_player = new QMediaPlayer(this);
     m_audioOutput = new QAudioOutput(this);
     m_player->setAudioOutput(m_audioOutput);
+    m_player->setVideoOutput(m_videoView);
     m_audioBuffer = new QBuffer(this);
     connect(m_player, &QMediaPlayer::playbackStateChanged, this, &PreviewWidget::playbackChanged);
     connect(m_player, &QMediaPlayer::positionChanged, this, &PreviewWidget::updateSoundPosition);
     connect(m_player, &QMediaPlayer::durationChanged, this, &PreviewWidget::updateSoundPosition);
+    connect(m_player, &QMediaPlayer::metaDataChanged, this, &PreviewWidget::updateSoundPosition);
     connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString& text) {
-        m_frameLabel->setText(tr("Could not play the sound: %1").arg(text));
+        m_frameLabel->setText(m_hasMovie ? tr("Could not play the movie: %1").arg(text)
+                                         : tr("Could not play the sound: %1").arg(text));
     });
 }
 
-// Detaches the player from the old buffer before its data goes away
+// Detaches the player from the old data before it goes away
 void PreviewWidget::clearSound()
 {
-    // Only touch the player if it has this sound; tearing a source down is not free
-    if (m_player && m_audioLoaded) {
+    // Only touch the player if it has this media; tearing a source down is not free
+    if (m_player && m_mediaLoaded) {
         m_player->stop();
         m_player->setSourceDevice(nullptr);
         m_audioBuffer->close();
         m_audioBuffer->setData(QByteArray());
     }
+    if (m_mediaDevice) {
+        m_mediaDevice->deleteLater();
+        m_mediaDevice = nullptr;
+    }
     m_audio.clear();
-    m_audioName.clear();
-    m_audioLoaded = false;
+    m_movie = VpFileSource();
+    m_hasMovie = false;
+    m_mediaName.clear();
+    m_mediaLoaded = false;
     if (s_mediaOwner == this)
         s_mediaOwner = nullptr;
 }
 
+// Position and length, plus the picture size once a movie has loaded
 void PreviewWidget::updateSoundPosition()
 {
+    if (!m_mediaLoaded)
+        return;
+
     auto format = [](qint64 ms) {
         return QString("%1:%2.%3").arg(ms / 60000).arg((ms / 1000) % 60, 2, 10, QChar('0')).arg((ms / 100) % 10);
     };
-    m_frameLabel->setText(QString("%1 / %2").arg(format(m_player->position()), format(m_player->duration())));
+    QString text = QString("%1 / %2").arg(format(m_player->position()), format(m_player->duration()));
+    if (m_hasMovie) {
+        const QSize resolution = m_player->metaData().value(QMediaMetaData::Resolution).toSize();
+        if (resolution.isValid())
+            text += tr(", %1 x %2").arg(resolution.width()).arg(resolution.height());
+    }
+    m_frameLabel->setText(text);
 }

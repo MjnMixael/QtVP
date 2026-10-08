@@ -308,8 +308,10 @@ void MainWindow::loadVp(const QString& path)
 // Swaps in a document, or none, with a fresh history, showing <All files>
 void MainWindow::setDocument(std::unique_ptr<VpDocument> document)
 {
-    // Detach everything and finish any preview load before the old document is destroyed
+    // Detach everything and finish any preview load before the old document is destroyed.
+    // A playing movie streams from the archive, so the preview goes first.
     waitForPreviewLoad();
+    resetPreview();
     {
         const QSignalBlocker blocker(m_editor);
         m_editor->setDocument(nullptr);
@@ -456,9 +458,12 @@ bool MainWindow::saveTo(const QString& path)
         return false;
     }
 
-    // Windows will not replace a file that is open, so let go of the VP being saved over
-    if (sameFile)
+    // Windows will not replace a file that is open, so let go of the VP being saved over,
+    // after stopping any movie that streams from it
+    if (sameFile) {
+        resetPreview();
         m_document->archive()->close();
+    }
 
     if (!writer.commit()) {
         // The old VP is untouched; reopen it so the unsaved edits can still read from it

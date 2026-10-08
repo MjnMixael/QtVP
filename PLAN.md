@@ -46,7 +46,7 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 - Media playback: only one `PreviewWidget` plays through Qt Multimedia at a time (`PreviewWidget::s_mediaOwner`); pressing Play in the pane or the pop-out stops the other. Opening the pop-out stops the pane's media and suspends its autoplay until the pop-out closes (`PreviewWindow::closed`). Movies must use the same owner when they land. Closing the pop-out clears its content, which stops and releases its player; while closed it receives no previews, and reopening it loads the current one.
 - Temp files: drag-out uses a `QTemporaryDir` in `%TEMP%` removed on exit; Open uses `%TEMP%\QtVP\Open\`, kept on exit so editors keep their files. Windows does not clean `%TEMP%` by default (only Storage Sense or Disk Cleanup), so `warmUp()` sweeps Open folders older than a day as a backstop.
 - `Icons` draws the preview buttons' icons (play, pause, stop, pop-out) and the sound placeholder as vector shapes in the palette's text color at paint time, so they follow the theme. The toolbar actions still use Qt standard icons.
-- **Next: user builds and tries phase 5 (steps 2 to 4); then phase 6.**
+- **Next: user builds and tries movie previews; then LZ41 writing.**
 
 ## Working conventions
 
@@ -156,8 +156,8 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 - `VpDocument` (QtCore only) mirrors an opened `VpArchive` (same ids as its entries and folders) and applies edits as field changes; removed items are only flagged, so ids never shift and each edit is undone by the same call with the old value. A file's `VpFileSource` is an archive entry or a disk path, a plain value a worker thread can read through. `VpDocument::extract` replaced `VpArchive::extract`. Previews use `PreviewLoader::Request`, built on the UI thread (name, `VpFileSource`, and for an EFF its resolved frame sources), so the worker never reads the document while it is being edited.
 - `VpWriter`: `check()` reports errors (names over 31 characters, outside Latin-1, or unsafe; empty files, since a size 0 entry is a folder to the engine; over 4 GB) and warnings (names the engine treats as the same in one folder). `write()` streams to a `QSaveFile` beside the target, copying archive entries exactly as stored (LZ41 stays compressed), then `commit()` swaps it in. Saving over the open VP must close the archive between the two, because Windows will not replace an open file. Layout: data from offset 16, directory at the end, each folder's files before its subfolders, folder and ".." records with offset 0 and time 0 (the commonest convention in 214 local VPs; the engine reads neither).
 
-### 6. Later
-- Movie previews (definitely wanted).
+### 6. Later (in progress)
+- Movie previews - written, awaiting build. MP4, WebM, OGV, MKV, AVI, MVE, and Theora `.ogg` (told from Vorbis by "theora" in the first 512 bytes, via `VpFileSource::readHead`). Movies are never read up front: `PreviewContent::Kind::Movie` carries the `VpFileSource`, and on Play `VpFileSource::openDevice` gives the player a seekable device that reads plainly stored entries straight from the VP (`VpArchive::readRaw`); LZ41 entries are decompressed into memory instead. The same player as sounds, with a `QVideoWidget` (`multimediawidgets` in `QtModules`; part of `qtmultimedia` in the release workflow), the one-at-a-time rule, and autoplay. Because playback reads the archive, `setDocument` and saving over the open VP clear the previews first. Local VPs hold 11 Theora OGGs (up to 36 MB) and 12 MP4s (up to 111 MB); MVE depends on Qt's FFmpeg build including the Interplay decoder.
 - Writing LZ41-compressed entries.
 - KTX/ETC2 previews (low priority).
-- App icon, splash logo, and custom toolbar icons (currently Qt's standard icons and a splash drawn in code).
+- App icon, splash logo, and custom toolbar icons (currently Qt's standard icons and a splash drawn in code). Needs the user's artwork.

@@ -252,6 +252,7 @@ PreviewLoader::Request PreviewLoader::request(const VpDocument& document, int fi
     Request request;
     request.name = document.files()[file].name;
     request.source = document.files()[file].source;
+    request.size = document.files()[file].size;
 
     if (QFileInfo(request.name).suffix().compare("eff", Qt::CaseInsensitive) == 0) {
         const EffInfo eff = readEff(document, file);
@@ -271,8 +272,9 @@ PreviewContent PreviewLoader::load(const Request& request)
 
     static const QStringList textTypes{ "tbl", "tbm", "fs2", "fc2", "lua", "sdr", "vert", "frag", "geom",
         "rml", "rcss", "txt", "html" };
+    static const QStringList movieTypes{ "mve", "mp4", "webm", "ogv", "mkv", "avi" };
     static const QStringList previewTypes{ "png", "jpg", "jpeg", "pcx", "tga", "dds", "ani", "eff", "wav", "ogg" };
-    if (!previewTypes.contains(ext) && !textTypes.contains(ext)) {
+    if (!previewTypes.contains(ext) && !textTypes.contains(ext) && !movieTypes.contains(ext)) {
         PreviewContent content = PreviewContent::fromMessage(ext.isEmpty()
             ? tr("No preview for files without an extension")
             : tr("No preview for .%1 files").arg(ext));
@@ -280,7 +282,21 @@ PreviewContent PreviewLoader::load(const Request& request)
         return content;
     }
 
+    // Movies are streamed by the player, not read here. An .ogg holds a movie when its
+    // first page names the Theora codec rather than Vorbis.
     QString error;
+    bool movie = movieTypes.contains(ext);
+    if (ext == "ogg")
+        movie = request.source.readHead(512, &error).contains("theora");
+    if (movie) {
+        PreviewContent content;
+        content.kind = PreviewContent::Kind::Movie;
+        content.movie = request.source;
+        content.title = name;
+        content.info = tr("%1 movie, %2").arg(ext.toUpper(), QLocale().formattedDataSize(request.size));
+        return content;
+    }
+
     const QByteArray data = request.source.read(&error);
     PreviewContent content;
     if (!error.isEmpty()) {

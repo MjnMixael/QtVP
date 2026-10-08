@@ -25,6 +25,14 @@ struct VpFileSource
     // The contents, decompressed if needed
     QByteArray read(QString* error) const;
     bool stream(const VpArchive::Sink& sink, QString* error) const;
+
+    // Just the first bytes, for telling formats apart without reading everything
+    QByteArray readHead(qint64 length, QString* error) const;
+
+    // An open, seekable device for a media player. Entries stored plainly are read straight
+    // from the VP as needed; LZ41 entries cannot be read at random, so they are decompressed
+    // into memory. The archive must outlive the device. Null with *error set on failure.
+    QIODevice* openDevice(QObject* parent, QString* error) const;
 };
 
 struct VpDocFile

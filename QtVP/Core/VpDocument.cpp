@@ -1,5 +1,6 @@
 #include "VpDocument.h"
 
+#include <QBuffer>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -20,6 +21,36 @@ void attach(std::vector<int>& list, int id)
     if (std::find(list.begin(), list.end(), id) == list.end())
         list.push_back(id);
 }
+
+// A read-only window onto one plainly stored entry. Unbuffered, so pos() inside
+// readData() is where the read starts.
+class EntryDevice : public QIODevice
+{
+public:
+    EntryDevice(const VpArchive* archive, int entry, QObject* parent)
+        : QIODevice(parent)
+        , m_archive(archive)
+        , m_entry(entry)
+        , m_size(archive->entries()[entry].size)
+    {
+    }
+
+    bool isSequential() const override { return false; }
+    qint64 size() const override { return m_size; }
+
+protected:
+    qint64 readData(char* data, qint64 maxSize) override
+    {
+        return m_archive->readRaw(m_entry, pos(), data, maxSize);
+    }
+
+    qint64 writeData(const char*, qint64) override { return -1; }
+
+private:
+    const VpArchive* m_archive;
+    int m_entry;
+    qint64 m_size;
+};
 
 } // namespace
 
@@ -63,6 +94,48 @@ bool VpFileSource::stream(const VpArchive::Sink& sink, QString* error) const
             return false;
     }
     return true;
+}
+
+QByteArray VpFileSource::readHead(qint64 length, QString* error) const
+{
+    QByteArray head;
+    stream([&](const char* data, qint64 n) {
+        head.append(data, std::min<qint64>(n, length - head.size()));
+        return head.size() < length;
+    }, error);
+    return head;
+}
+
+QIODevice* VpFileSource::openDevice(QObject* parent, QString* error) const
+{
+    if (!fromArchive()) {
+        auto* file = new QFile(diskPath, parent);
+        if (!file->open(QIODevice::ReadOnly)) {
+            if (error)
+                *error = file->errorString();
+            delete file;
+            return nullptr;
+        }
+        return file;
+    }
+
+    if (!archive->isCompressed(entry)) {
+        auto* device = new EntryDevice(archive, entry, parent);
+        device->open(QIODevice::ReadOnly | QIODevice::Unbuffered);
+        return device;
+    }
+
+    QString readError;
+    const QByteArray data = archive->readEntry(entry, &readError);
+    if (!readError.isEmpty()) {
+        if (error)
+            *error = readError;
+        return nullptr;
+    }
+    auto* buffer = new QBuffer(parent);
+    buffer->setData(data);
+    buffer->open(QIODevice::ReadOnly);
+    return buffer;
 }
 
 QByteArray VpFileSource::read(QString* error) const
