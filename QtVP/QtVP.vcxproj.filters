@@ -47,6 +47,9 @@
     <ClCompile Include="Models\FileListModel.cpp">
       <Filter>Source Files\Models</Filter>
     </ClCompile>
+    <ClCompile Include="Models\FileTypeIcons.cpp">
+      <Filter>Source Files\Models</Filter>
+    </ClCompile>
     <ClCompile Include="Models\FolderTreeModel.cpp">
       <Filter>Source Files\Models</Filter>
     </ClCompile>
@@ -87,6 +90,9 @@
     </ClInclude>
     <ClInclude Include="Core\VpArchive.h">
       <Filter>Source Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Models\FileTypeIcons.h">
+      <Filter>Source Files\Models</Filter>
     </ClInclude>
     <ClInclude Include="Previews\AnimationDecoders.h">
       <Filter>Source Files\Previews</Filter>

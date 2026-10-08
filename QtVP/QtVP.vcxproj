@@ -107,6 +107,7 @@
     <ClCompile Include="Theme.cpp" />
     <ClCompile Include="Core\VpArchive.cpp" />
     <ClCompile Include="Models\FileListModel.cpp" />
+    <ClCompile Include="Models\FileTypeIcons.cpp" />
     <ClCompile Include="Models\FolderTreeModel.cpp" />
     <ClCompile Include="Previews\AnimationDecoders.cpp" />
     <ClCompile Include="Previews\ImageDecoders.cpp" />
@@ -123,6 +124,7 @@
     <ClInclude Include="Icons.h" />
     <ClInclude Include="Theme.h" />
     <ClInclude Include="Core\VpArchive.h" />
+    <ClInclude Include="Models\FileTypeIcons.h" />
     <ClInclude Include="Previews\AnimationDecoders.h" />
     <ClInclude Include="Previews\ImageDecoders.h" />
     <ClInclude Include="Previews\PreviewContent.h" />

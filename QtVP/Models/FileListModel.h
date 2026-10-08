@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QAbstractTableModel>
-#include <QIcon>
 #include <QList>
 #include <QUrl>
 
@@ -46,5 +45,4 @@ private:
     const VpArchive* m_archive = nullptr;
     std::vector<int> m_entries;
     DragProvider m_dragProvider;
-    QIcon m_fileIcon;
 };

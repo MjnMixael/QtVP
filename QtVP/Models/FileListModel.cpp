@@ -1,13 +1,12 @@
 #include "FileListModel.h"
 
-#include <QApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QLocale>
 #include <QMimeData>
-#include <QStyle>
 
 #include "Core/VpArchive.h"
+#include "Models/FileTypeIcons.h"
 
 namespace {
 
@@ -24,7 +23,6 @@ QString typeName(const QString& fileName)
 FileListModel::FileListModel(QObject* parent)
     : QAbstractTableModel(parent)
 {
-    m_fileIcon = QApplication::style()->standardIcon(QStyle::SP_FileIcon);
 }
 
 void FileListModel::setArchive(const VpArchive* archive)
@@ -85,7 +83,7 @@ QVariant FileListModel::data(const QModelIndex& index, int role) const
         }
     }
     if (role == Qt::DecorationRole && index.column() == NameColumn)
-        return m_fileIcon;
+        return FileTypeIcons::forFileName(e.name);
     if (role == Qt::TextAlignmentRole && index.column() == SizeColumn)
         return QVariant(Qt::AlignRight | Qt::AlignVCenter);
     return {};
