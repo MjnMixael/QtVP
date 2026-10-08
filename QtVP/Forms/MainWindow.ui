@@ -127,21 +127,12 @@
           </layout>
          </item>
          <item>
-          <widget class="QLabel" name="previewArea">
+          <widget class="PreviewWidget" name="previewArea">
            <property name="minimumSize">
             <size>
              <width>0</width>
              <height>80</height>
             </size>
-           </property>
-           <property name="frameShape">
-            <enum>QFrame::Shape::StyledPanel</enum>
-           </property>
-           <property name="text">
-            <string>Select a file to preview</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
@@ -339,6 +330,13 @@
    </property>
   </action>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PreviewWidget</class>
+   <extends>QFrame</extends>
+   <header>Previews/PreviewWidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

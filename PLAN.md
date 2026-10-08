@@ -35,7 +35,9 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 - `QSettings` (org and app name both `QtVP`): `window/*` for geometry, splitters, and the file list header; `paths/lastVpDir`, `paths/lastExtractDir`; `appearance/theme` (`system`, `light`, `dark`); `recentFiles` (up to 10, native paths).
 - Icons are Qt standard icons (`QStyle::standardIcon`). No app icon or `.rc` file yet.
 - The release workflow has not run yet. No version tag exists.
-- **Next: Phase 4 (previews).**
+- Phase 4 in progress, one commit per step: (1) preview pane, pop-out, PNG/JPG/PCX/TGA - written, awaiting build; (2) DDS; (3) ANI/EFF/APNG; (4) WAV/OGG; (5) text viewer.
+- Previews: `Previews\PreviewLoader` picks a decoder by extension and returns a self-contained `PreviewContent` (image or message, plus an info line). `Previews\PreviewWidget` (promoted in the .ui as `previewArea`) shows it; `Windows\PreviewWindow` is the pop-out, one instance that follows the selection while open (double-click or the pop-out button; Esc closes). Only a single selected file is previewed. `Previews\ImageDecoders` has PCX (8-bit paletted, plus 24-bit three-plane, which the engine rejects but old VPs contain) and TGA (types 1-3 and RLE 9-11, 8/15/16/24/32-bit, both origins). Images are scaled to fit; small ones are enlarged by whole multiples with no smoothing.
+- **Next: Phase 4 step 2 (DDS).**
 
 ## Working conventions
 

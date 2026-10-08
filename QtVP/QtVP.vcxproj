@@ -107,14 +107,21 @@
     <ClCompile Include="Core\VpArchive.cpp" />
     <ClCompile Include="Models\FileListModel.cpp" />
     <ClCompile Include="Models\FolderTreeModel.cpp" />
+    <ClCompile Include="Previews\ImageDecoders.cpp" />
+    <ClCompile Include="Previews\PreviewLoader.cpp" />
+    <ClCompile Include="Previews\PreviewWidget.cpp" />
     <ClCompile Include="Windows\MainWindow.cpp" />
     <ClCompile Include="Windows\OptionsDialog.cpp" />
+    <ClCompile Include="Windows\PreviewWindow.cpp" />
     <ClCompile Include="Dependencies\lz4\lz4.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
       <SDLCheck>false</SDLCheck>
     </ClCompile>
     <ClInclude Include="Theme.h" />
     <ClInclude Include="Core\VpArchive.h" />
+    <ClInclude Include="Previews\ImageDecoders.h" />
+    <ClInclude Include="Previews\PreviewContent.h" />
+    <ClInclude Include="Previews\PreviewLoader.h" />
     <ClInclude Include="Dependencies\lz4\lz4.h" />
     <QtUic Include="Forms\MainWindow.ui" />
     <QtUic Include="Forms\OptionsDialog.ui" />
@@ -122,6 +129,8 @@
     <QtMoc Include="Models\FolderTreeModel.h" />
     <QtMoc Include="Windows\MainWindow.h" />
     <QtMoc Include="Windows\OptionsDialog.h" />
+    <QtMoc Include="Previews\PreviewWidget.h" />
+    <QtMoc Include="Windows\PreviewWindow.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

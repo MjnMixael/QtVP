@@ -11,6 +11,9 @@
     <Filter Include="Source Files\Models">
       <UniqueIdentifier>{E7A41C3D-58B2-4F96-A0D8-1B6C9E2F7A53}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Previews">
+      <UniqueIdentifier>{A3D5F172-0B8E-4C69-9E14-5F2B7C8D0A61}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\Windows">
       <UniqueIdentifier>{5A0C7E21-6F3B-4D7E-9C1A-3B8E2D4F6A01}</UniqueIdentifier>
     </Filter>
@@ -41,6 +44,18 @@
     <ClCompile Include="Models\FolderTreeModel.cpp">
       <Filter>Source Files\Models</Filter>
     </ClCompile>
+    <ClCompile Include="Previews\ImageDecoders.cpp">
+      <Filter>Source Files\Previews</Filter>
+    </ClCompile>
+    <ClCompile Include="Previews\PreviewLoader.cpp">
+      <Filter>Source Files\Previews</Filter>
+    </ClCompile>
+    <ClCompile Include="Previews\PreviewWidget.cpp">
+      <Filter>Source Files\Previews</Filter>
+    </ClCompile>
+    <ClCompile Include="Windows\PreviewWindow.cpp">
+      <Filter>Source Files\Windows</Filter>
+    </ClCompile>
     <ClCompile Include="Windows\MainWindow.cpp">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
@@ -58,6 +73,15 @@
     <ClInclude Include="Core\VpArchive.h">
       <Filter>Source Files\Core</Filter>
     </ClInclude>
+    <ClInclude Include="Previews\ImageDecoders.h">
+      <Filter>Source Files\Previews</Filter>
+    </ClInclude>
+    <ClInclude Include="Previews\PreviewContent.h">
+      <Filter>Source Files\Previews</Filter>
+    </ClInclude>
+    <ClInclude Include="Previews\PreviewLoader.h">
+      <Filter>Source Files\Previews</Filter>
+    </ClInclude>
     <ClInclude Include="Dependencies\lz4\lz4.h">
       <Filter>Dependencies\lz4</Filter>
     </ClInclude>
@@ -68,6 +92,12 @@
     </QtMoc>
     <QtMoc Include="Models\FolderTreeModel.h">
       <Filter>Source Files\Models</Filter>
+    </QtMoc>
+    <QtMoc Include="Previews\PreviewWidget.h">
+      <Filter>Source Files\Previews</Filter>
+    </QtMoc>
+    <QtMoc Include="Windows\PreviewWindow.h">
+      <Filter>Source Files\Windows</Filter>
     </QtMoc>
     <QtMoc Include="Windows\MainWindow.h">
       <Filter>Source Files\Windows</Filter>

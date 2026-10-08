@@ -4,7 +4,10 @@
 #include "Core/VpArchive.h"
 #include "Models/FileListModel.h"
 #include "Models/FolderTreeModel.h"
+#include "Previews/PreviewLoader.h"
+#include "Previews/PreviewWidget.h"
 #include "Windows/OptionsDialog.h"
+#include "Windows/PreviewWindow.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -105,6 +108,7 @@ void MainWindow::openVp(const QString& path)
     // Start on <All files> with the top-level folders open
     ui->folderTree->expandToDepth(0);
     ui->folderTree->setCurrentIndex(m_folderModel->allFilesIndex());
+    resetPreview();
 
     addRecentFile(path);
     setWindowTitle(tr("QtVP - %1").arg(QFileInfo(path).fileName()));
@@ -124,6 +128,7 @@ void MainWindow::closeVp()
     m_fileModel->setArchive(nullptr);
     m_archive.reset();
     m_currentFolder = FolderTreeModel::NoFolder;
+    resetPreview();
 
     setWindowTitle(tr("QtVP"));
     statusBar()->showMessage(tr("Ready"));
@@ -133,6 +138,9 @@ void MainWindow::closeVp()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    // Lets the pop-out save its geometry
+    if (m_previewWindow)
+        m_previewWindow->close();
     saveLayout();
     event->accept();
 }
@@ -232,6 +240,9 @@ void MainWindow::setupConnections()
     connect(ui->filterEdit, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
 
     connect(ui->fileList->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updateSelectionStatus);
+    connect(ui->fileList->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updatePreview);
+    connect(ui->fileList, &QAbstractItemView::doubleClicked, this, &MainWindow::openPreviewWindow);
+    connect(ui->popOutButton, &QToolButton::clicked, this, &MainWindow::openPreviewWindow);
     connect(m_fileProxy, &QAbstractItemModel::modelReset, this, &MainWindow::updateSelectionStatus);
     connect(m_fileProxy, &QAbstractItemModel::rowsInserted, this, &MainWindow::updateSelectionStatus);
     connect(m_fileProxy, &QAbstractItemModel::rowsRemoved, this, &MainWindow::updateSelectionStatus);
@@ -263,12 +274,56 @@ void MainWindow::updateActions()
     const bool hasVp = m_archive != nullptr;
     ui->actionCloseVp->setEnabled(hasVp);
     ui->actionExtractToDir->setEnabled(hasVp);
+    ui->popOutButton->setEnabled(hasVp);
 
     // Not wired up yet
     ui->actionNewVp->setEnabled(false);
     ui->playButton->setEnabled(false);
     ui->stopButton->setEnabled(false);
-    ui->popOutButton->setEnabled(false);
+}
+
+// Previews the selected file when exactly one is selected
+void MainWindow::updatePreview()
+{
+    const std::vector<int> selected = selectedEntries();
+    const int entry = selected.size() == 1 ? selected.front() : -1;
+    if (entry >= 0 && entry == m_previewEntry)
+        return;
+
+    m_previewEntry = entry;
+    if (entry >= 0) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        m_preview = PreviewLoader::load(*m_archive, entry);
+        QApplication::restoreOverrideCursor();
+    } else if (selected.size() > 1) {
+        m_preview = PreviewContent::fromMessage(tr("%n files selected", nullptr, int(selected.size())));
+    } else {
+        m_preview = PreviewContent::fromMessage(tr("Select a file to preview"));
+    }
+
+    ui->previewArea->setContent(m_preview);
+    if (m_previewWindow)
+        m_previewWindow->setContent(m_preview);
+}
+
+void MainWindow::resetPreview()
+{
+    m_previewEntry = -1;
+    m_preview = PreviewContent::fromMessage(tr("Select a file to preview"));
+    ui->previewArea->setContent(m_preview);
+    if (m_previewWindow)
+        m_previewWindow->setContent(m_preview);
+}
+
+void MainWindow::openPreviewWindow()
+{
+    if (!m_previewWindow) {
+        m_previewWindow = new PreviewWindow(this);
+        m_previewWindow->setContent(m_preview);
+    }
+    m_previewWindow->show();
+    m_previewWindow->raise();
+    m_previewWindow->activateWindow();
 }
 
 void MainWindow::updateSelectionStatus()
@@ -307,6 +362,9 @@ void MainWindow::showFolder(const QModelIndex& index)
     m_fileModel->setEntries(std::move(entries));
     ui->fileList->setColumnHidden(FileListModel::PathColumn, m_currentFolder != FolderTreeModel::AllFiles);
     updateSelectionStatus();
+
+    // A model reset clears the selection without signaling
+    updatePreview();
 }
 
 // Plain text matches anywhere in the name; * and ? match whole names; ; separates patterns

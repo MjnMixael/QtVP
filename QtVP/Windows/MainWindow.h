@@ -7,8 +7,11 @@
 #include <memory>
 #include <vector>
 
+#include "Previews/PreviewContent.h"
+
 class FileListModel;
 class FolderTreeModel;
+class PreviewWindow;
 class QLabel;
 class QMenu;
 class QModelIndex;
@@ -41,6 +44,9 @@ private:
     void saveLayout();
     void updateActions();
     void updateSelectionStatus();
+    void updatePreview();
+    void resetPreview();
+    void openPreviewWindow();
 
     void showFolder(const QModelIndex& index);
     void onFilterChanged(const QString& text);
@@ -65,6 +71,11 @@ private:
     QLabel* m_selectionLabel = nullptr;
     QMenu* m_recentMenu = nullptr;
     int m_currentFolder;
+
+    // What the preview pane and pop-out window show; m_previewEntry is -1 when it is not a file
+    PreviewContent m_preview;
+    int m_previewEntry = -1;
+    PreviewWindow* m_previewWindow = nullptr;
 
     // Drag-out extracts here; removed when the app exits
     std::unique_ptr<QTemporaryDir> m_dragDir;
