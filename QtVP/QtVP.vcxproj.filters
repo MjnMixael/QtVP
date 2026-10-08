@@ -35,6 +35,9 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Icons.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Theme.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -73,6 +76,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Icons.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
     <ClInclude Include="Theme.h">
       <Filter>Source Files</Filter>
     </ClInclude>

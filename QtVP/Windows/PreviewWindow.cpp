@@ -4,10 +4,10 @@
 #include <QHBoxLayout>
 #include <QSettings>
 #include <QShortcut>
-#include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include "Icons.h"
 #include "Previews/PreviewWidget.h"
 
 PreviewWindow::PreviewWindow(QWidget* parent)
@@ -19,7 +19,7 @@ PreviewWindow::PreviewWindow(QWidget* parent)
     m_playButton->setAutoRaise(true);
     m_stopButton = new QToolButton(this);
     m_stopButton->setAutoRaise(true);
-    m_stopButton->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
+    m_stopButton->setIcon(Icons::icon(Icons::Shape::Stop));
     m_stopButton->setToolTip(tr("Stop"));
 
     auto* controls = new QHBoxLayout;
@@ -52,6 +52,12 @@ void PreviewWindow::setContent(const PreviewContent& content)
     setWindowTitle(content.title.isEmpty() ? tr("Preview") : tr("Preview - %1").arg(content.title));
 }
 
+void PreviewWindow::setLoading(const QString& title)
+{
+    m_preview->setLoading(title);
+    setWindowTitle(tr("Preview - %1").arg(title));
+}
+
 void PreviewWindow::closeEvent(QCloseEvent* event)
 {
     QSettings().setValue("window/previewGeometry", saveGeometry());
@@ -64,6 +70,6 @@ void PreviewWindow::updatePlaybackButtons()
     const bool playing = m_preview->isPlaying();
     m_playButton->setEnabled(playable);
     m_stopButton->setEnabled(playable);
-    m_playButton->setIcon(style()->standardIcon(playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+    m_playButton->setIcon(Icons::icon(playing ? Icons::Shape::Pause : Icons::Shape::Play));
     m_playButton->setToolTip(playing ? tr("Pause") : tr("Play"));
 }

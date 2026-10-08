@@ -16,6 +16,7 @@ public:
     explicit PreviewWindow(QWidget* parent = nullptr);
 
     void setContent(const PreviewContent& content);
+    void setLoading(const QString& title);
 
 protected:
     void closeEvent(QCloseEvent* event) override;

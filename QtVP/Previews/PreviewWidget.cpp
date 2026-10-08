@@ -1,14 +1,16 @@
 #include "PreviewWidget.h"
 
+#include "Icons.h"
+
 #include <QAudioOutput>
 #include <QBuffer>
+#include <QEvent>
 #include <QFontDatabase>
 #include <QLabel>
 #include <QMediaPlayer>
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QStackedLayout>
-#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -70,6 +72,60 @@ void ImageView::paintEvent(QPaintEvent*)
     painter.drawPixmap(target, m_scaled);
 }
 
+BusyIndicator::BusyIndicator(QWidget* parent)
+    : QWidget(parent)
+{
+    m_timer = new QTimer(this);
+    m_timer->setInterval(30);
+    connect(m_timer, &QTimer::timeout, this, [this] {
+        m_angle = (m_angle + 12) % 360;
+        update();
+    });
+}
+
+void BusyIndicator::setText(const QString& text)
+{
+    m_text = text;
+    update();
+}
+
+void BusyIndicator::paintEvent(QPaintEvent*)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    const QColor color = palette().color(QPalette::WindowText);
+    const int side = std::min({ width(), height() - fontMetrics().height() * 2, 32 });
+    const int textHeight = fontMetrics().height();
+    const int top = (height() - side - textHeight - 8) / 2;
+
+    if (side > 4) {
+        QRectF arc((width() - side) / 2.0, top, side, side);
+        arc.adjust(2, 2, -2, -2);
+        QColor track = color;
+        track.setAlphaF(0.2f);
+        painter.setPen(QPen(track, 3));
+        painter.drawEllipse(arc);
+        painter.setPen(QPen(color, 3, Qt::SolidLine, Qt::RoundCap));
+        painter.drawArc(arc, -m_angle * 16, 90 * 16);
+    }
+
+    painter.setPen(color);
+    const QRect textRect(0, top + std::max(side, 0) + 8, width(), textHeight);
+    painter.drawText(textRect, Qt::AlignHCenter | Qt::AlignTop,
+        fontMetrics().elidedText(m_text, Qt::ElideMiddle, width() - 8));
+}
+
+void BusyIndicator::showEvent(QShowEvent*)
+{
+    m_timer->start();
+}
+
+void BusyIndicator::hideEvent(QHideEvent*)
+{
+    m_timer->stop();
+}
+
 PreviewWidget::PreviewWidget(QWidget* parent)
     : QFrame(parent)
 {
@@ -84,12 +140,14 @@ PreviewWidget::PreviewWidget(QWidget* parent)
 
     m_soundView = new QLabel(this);
     m_soundView->setAlignment(Qt::AlignCenter);
-    m_soundView->setPixmap(style()->standardIcon(QStyle::SP_MediaVolume).pixmap(48, 48));
+    updateSoundIcon();
 
     m_textView = new QPlainTextEdit(this);
     m_textView->setReadOnly(true);
     m_textView->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_textView->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+
+    m_busy = new BusyIndicator(this);
 
     m_info = new QLabel(this);
     m_info->setAlignment(Qt::AlignCenter);
@@ -106,6 +164,7 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     m_stack->addWidget(m_imageView);
     m_stack->addWidget(m_soundView);
     m_stack->addWidget(m_textView);
+    m_stack->addWidget(m_busy);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(2, 2, 2, 2);
@@ -124,13 +183,7 @@ PreviewWidget::PreviewWidget(QWidget* parent)
 
 void PreviewWidget::setContent(const PreviewContent& content)
 {
-    m_timer->stop();
-    m_frames.clear();
-    m_durations.clear();
-    m_frame = 0;
-    clearSound();
-    if (content.kind != PreviewContent::Kind::Text)
-        m_textView->clear();
+    stopAndClear();
 
     if (content.kind == PreviewContent::Kind::Animation && !content.frames.empty()) {
         m_frames = content.frames;
@@ -141,20 +194,17 @@ void PreviewWidget::setContent(const PreviewContent& content)
         if (isPlayable())
             m_timer->start(m_durations[0]);
     } else if (content.kind == PreviewContent::Kind::Sound) {
-        m_imageView->setImage(QImage());
         m_audio = content.audio;
         m_audioName = content.title;
         m_stack->setCurrentWidget(m_soundView);
         m_frameLabel->setText(tr("Press Play to listen"));
     } else if (content.kind == PreviewContent::Kind::Text) {
-        m_imageView->setImage(QImage());
         m_textView->setPlainText(content.text);
         m_stack->setCurrentWidget(m_textView);
     } else if (content.kind == PreviewContent::Kind::Image) {
         m_imageView->setImage(content.image);
         m_stack->setCurrentWidget(m_imageView);
     } else {
-        m_imageView->setImage(QImage());
         m_message->setText(content.message);
         m_stack->setCurrentWidget(m_message);
     }
@@ -163,6 +213,43 @@ void PreviewWidget::setContent(const PreviewContent& content)
     m_info->setVisible(!content.info.isEmpty());
     m_frameLabel->setVisible(isPlayable());
     emit playbackChanged();
+}
+
+void PreviewWidget::setLoading(const QString& title)
+{
+    stopAndClear();
+    m_busy->setText(tr("Loading %1").arg(title));
+    m_stack->setCurrentWidget(m_busy);
+    m_info->hide();
+    m_frameLabel->hide();
+    emit playbackChanged();
+}
+
+// Stops any playback and drops the previous preview's data
+void PreviewWidget::stopAndClear()
+{
+    m_timer->stop();
+    m_frames.clear();
+    m_durations.clear();
+    m_frame = 0;
+    clearSound();
+    m_imageView->setImage(QImage());
+    m_textView->clear();
+}
+
+void PreviewWidget::changeEvent(QEvent* event)
+{
+    QFrame::changeEvent(event);
+    const QEvent::Type type = event->type();
+    if (type == QEvent::PaletteChange || type == QEvent::StyleChange || type == QEvent::ThemeChange)
+        updateSoundIcon();
+}
+
+// A pixmap does not repaint itself, so redraw it in the current text color
+void PreviewWidget::updateSoundIcon()
+{
+    if (m_soundView)
+        m_soundView->setPixmap(Icons::icon(Icons::Shape::Sound).pixmap(QSize(48, 48), devicePixelRatioF()));
 }
 
 bool PreviewWidget::isPlaying() const
@@ -245,7 +332,8 @@ void PreviewWidget::nextFrame()
 // Detaches the player from the old buffer before its data goes away
 void PreviewWidget::clearSound()
 {
-    if (m_player) {
+    // Only touch the player if it has this sound; tearing a source down is not free
+    if (m_player && m_audioLoaded) {
         m_player->stop();
         m_player->setSourceDevice(nullptr);
         m_audioBuffer->close();

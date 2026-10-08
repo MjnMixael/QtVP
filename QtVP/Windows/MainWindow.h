@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QFutureWatcher>
 #include <QList>
 #include <QMainWindow>
 #include <QUrl>
@@ -17,6 +18,7 @@ class QMenu;
 class QModelIndex;
 class QSortFilterProxyModel;
 class QTemporaryDir;
+class QTimer;
 class VpArchive;
 namespace Ui { class MainWindow; }
 
@@ -48,6 +50,11 @@ private:
     void updatePlaybackButtons();
     void resetPreview();
     void openPreviewWindow();
+    void startPreviewLoad();
+    void onPreviewLoaded();
+    void showPreviewSpinner();
+    void showPreview(const PreviewContent& content);
+    void waitForPreviewLoad();
 
     void showFolder(const QModelIndex& index);
     void onFilterChanged(const QString& text);
@@ -77,6 +84,15 @@ private:
     PreviewContent m_preview;
     int m_previewEntry = -1;
     PreviewWindow* m_previewWindow = nullptr;
+
+    // Previews load on a worker thread, one at a time. Each request gets a number so
+    // results for files the user has already moved past are dropped.
+    QFutureWatcher<PreviewContent>* m_previewWatcher = nullptr;
+    QTimer* m_previewSpinnerTimer = nullptr;
+    int m_previewRequest = 0;       // the newest request
+    int m_loadingRequest = 0;       // the request the running load belongs to
+    bool m_previewQueued = false;   // the newest request waits for the running load
+    bool m_previewSpinnerShown = false;
 
     // Drag-out extracts here; removed when the app exits
     std::unique_ptr<QTemporaryDir> m_dragDir;

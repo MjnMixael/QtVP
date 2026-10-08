@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
 
+#include "Icons.h"
 #include "Core/VpArchive.h"
 #include "Models/FileListModel.h"
 #include "Models/FolderTreeModel.h"
@@ -31,6 +32,7 @@
 #include <QStyle>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <numeric>
@@ -82,6 +84,7 @@ MainWindow::MainWindow(QWidget* parent)
 MainWindow::~MainWindow()
 {
     // The models outlive this destructor as child objects; keep them off the archive
+    waitForPreviewLoad();
     m_folderModel->setArchive(nullptr);
     m_fileModel->setArchive(nullptr);
     delete ui;
@@ -99,7 +102,8 @@ void MainWindow::openVp(const QString& path)
         return;
     }
 
-    // Detach the models before the old archive is destroyed
+    // Detach the models and finish any preview load before the old archive is destroyed
+    waitForPreviewLoad();
     m_folderModel->setArchive(nullptr);
     m_fileModel->setArchive(nullptr);
     m_archive = std::move(archive);
@@ -125,6 +129,7 @@ void MainWindow::openVp(const QString& path)
 
 void MainWindow::closeVp()
 {
+    waitForPreviewLoad();
     m_folderModel->setArchive(nullptr);
     m_fileModel->setArchive(nullptr);
     m_archive.reset();
@@ -184,9 +189,9 @@ void MainWindow::setupIcons()
     ui->actionExtractToDir->setIcon(s->standardIcon(QStyle::SP_DirOpenIcon));
     ui->actionOptions->setIcon(s->standardIcon(QStyle::SP_FileDialogDetailedView));
 
-    ui->playButton->setIcon(s->standardIcon(QStyle::SP_MediaPlay));
-    ui->stopButton->setIcon(s->standardIcon(QStyle::SP_MediaStop));
-    ui->popOutButton->setIcon(s->standardIcon(QStyle::SP_TitleBarMaxButton));
+    ui->playButton->setIcon(Icons::icon(Icons::Shape::Play));
+    ui->stopButton->setIcon(Icons::icon(Icons::Shape::Stop));
+    ui->popOutButton->setIcon(Icons::icon(Icons::Shape::PopOut));
 }
 
 void MainWindow::setupModels()
@@ -214,6 +219,13 @@ void MainWindow::setupModels()
 
     m_selectionLabel = new QLabel(this);
     statusBar()->addPermanentWidget(m_selectionLabel);
+
+    m_previewWatcher = new QFutureWatcher<PreviewContent>(this);
+    connect(m_previewWatcher, &QFutureWatcher<PreviewContent>::finished, this, &MainWindow::onPreviewLoaded);
+    m_previewSpinnerTimer = new QTimer(this);
+    m_previewSpinnerTimer->setSingleShot(true);
+    m_previewSpinnerTimer->setInterval(150);
+    connect(m_previewSpinnerTimer, &QTimer::timeout, this, &MainWindow::showPreviewSpinner);
 
     // Right-click menus reuse the extract action
     ui->fileList->setContextMenuPolicy(Qt::ActionsContextMenu);
@@ -290,7 +302,7 @@ void MainWindow::updatePlaybackButtons()
     const bool playing = ui->previewArea->isPlaying();
     ui->playButton->setEnabled(playable);
     ui->stopButton->setEnabled(playable);
-    ui->playButton->setIcon(style()->standardIcon(playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+    ui->playButton->setIcon(Icons::icon(playing ? Icons::Shape::Pause : Icons::Shape::Play));
     ui->playButton->setToolTip(playing ? tr("Pause") : tr("Play"));
 }
 
@@ -303,16 +315,67 @@ void MainWindow::updatePreview()
         return;
 
     m_previewEntry = entry;
-    if (entry >= 0) {
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        m_preview = PreviewLoader::load(*m_archive, entry);
-        QApplication::restoreOverrideCursor();
-    } else if (selected.size() > 1) {
-        m_preview = PreviewContent::fromMessage(tr("%n files selected", nullptr, int(selected.size())));
-    } else {
-        m_preview = PreviewContent::fromMessage(tr("Select a file to preview"));
+    ++m_previewRequest;
+    m_previewQueued = false;
+
+    if (entry < 0) {
+        showPreview(PreviewContent::fromMessage(selected.size() > 1
+            ? tr("%n files selected", nullptr, int(selected.size()))
+            : tr("Select a file to preview")));
+        return;
     }
 
+    // Quick loads swap straight to the result; slow ones get a spinner
+    m_previewSpinnerTimer->start();
+
+    // If a load is running, this file goes next and anything selected in between is skipped
+    if (m_previewWatcher->isRunning())
+        m_previewQueued = true;
+    else
+        startPreviewLoad();
+}
+
+void MainWindow::startPreviewLoad()
+{
+    m_previewQueued = false;
+    m_loadingRequest = m_previewRequest;
+    const VpArchive* archive = m_archive.get();
+    const int entry = m_previewEntry;
+    m_previewWatcher->setFuture(QtConcurrent::run([archive, entry] {
+        return PreviewLoader::load(*archive, entry);
+    }));
+}
+
+void MainWindow::onPreviewLoaded()
+{
+    // A late signal from a replaced load; result() would block on the current one
+    if (!m_previewWatcher->isFinished())
+        return;
+
+    if (m_previewQueued) {
+        startPreviewLoad();
+        return;
+    }
+    if (m_loadingRequest == m_previewRequest)
+        showPreview(m_previewWatcher->result());
+}
+
+void MainWindow::showPreviewSpinner()
+{
+    if (!m_archive || m_previewEntry < 0)
+        return;
+    const QString name = m_archive->entries()[m_previewEntry].name;
+    m_previewSpinnerShown = true;
+    ui->previewArea->setLoading(name);
+    if (m_previewWindow)
+        m_previewWindow->setLoading(name);
+}
+
+void MainWindow::showPreview(const PreviewContent& content)
+{
+    m_previewSpinnerTimer->stop();
+    m_previewSpinnerShown = false;
+    m_preview = content;
     ui->previewArea->setContent(m_preview);
     if (m_previewWindow)
         m_previewWindow->setContent(m_preview);
@@ -321,17 +384,27 @@ void MainWindow::updatePreview()
 void MainWindow::resetPreview()
 {
     m_previewEntry = -1;
-    m_preview = PreviewContent::fromMessage(tr("Select a file to preview"));
-    ui->previewArea->setContent(m_preview);
-    if (m_previewWindow)
-        m_previewWindow->setContent(m_preview);
+    ++m_previewRequest;
+    m_previewQueued = false;
+    showPreview(PreviewContent::fromMessage(tr("Select a file to preview")));
+}
+
+// A running load reads the archive, so it has to finish before the archive is destroyed
+void MainWindow::waitForPreviewLoad()
+{
+    m_previewQueued = false;
+    ++m_previewRequest;
+    m_previewWatcher->waitForFinished();
 }
 
 void MainWindow::openPreviewWindow()
 {
     if (!m_previewWindow) {
         m_previewWindow = new PreviewWindow(this);
-        m_previewWindow->setContent(m_preview);
+        if (m_previewSpinnerShown)
+            m_previewWindow->setLoading(m_archive->entries()[m_previewEntry].name);
+        else
+            m_previewWindow->setContent(m_preview);
     }
     m_previewWindow->show();
     m_previewWindow->raise();

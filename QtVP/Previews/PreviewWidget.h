@@ -34,6 +34,26 @@ private:
     QPixmap m_scaled;   // cached at the last drawn size
 };
 
+// A spinning arc with a line of text under it, shown while a preview loads.
+// Only animates while visible.
+class BusyIndicator : public QWidget
+{
+public:
+    explicit BusyIndicator(QWidget* parent = nullptr);
+
+    void setText(const QString& text);
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
+
+private:
+    QTimer* m_timer = nullptr;
+    QString m_text;
+    int m_angle = 0;
+};
+
 // Shows a PreviewContent: an image, an animation, a sound, text, or a message, with an
 // info line underneath. Used both in the main window's preview pane and in the
 // pop-out window. Animations start playing as soon as they are shown; sounds wait
@@ -47,6 +67,9 @@ public:
 
     void setContent(const PreviewContent& content);
 
+    // Clears the current preview and shows a spinner until the next setContent()
+    void setLoading(const QString& title);
+
     bool isPlayable() const { return m_frames.size() > 1 || !m_audio.isEmpty(); }
     bool isPlaying() const;
 
@@ -56,7 +79,12 @@ public:
 signals:
     void playbackChanged();
 
+protected:
+    void changeEvent(QEvent* event) override;
+
 private:
+    void stopAndClear();
+    void updateSoundIcon();
     void showFrame(size_t index);
     void nextFrame();
     void clearSound();
@@ -67,6 +95,7 @@ private:
     ImageView* m_imageView = nullptr;
     QLabel* m_soundView = nullptr;
     QPlainTextEdit* m_textView = nullptr;
+    BusyIndicator* m_busy = nullptr;
     QLabel* m_info = nullptr;
     QLabel* m_frameLabel = nullptr;     // frame counter, or sound position
 
