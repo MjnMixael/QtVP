@@ -5,7 +5,7 @@
 #include <QLocale>
 #include <QMimeData>
 
-#include "Core/VpArchive.h"
+#include "Core/VpDocument.h"
 #include "Models/FileTypeIcons.h"
 
 namespace {
@@ -25,10 +25,10 @@ FileListModel::FileListModel(QObject* parent)
 {
 }
 
-void FileListModel::setArchive(const VpArchive* archive)
+void FileListModel::setDocument(const VpDocument* document)
 {
     beginResetModel();
-    m_archive = archive;
+    m_document = document;
     m_entries.clear();
     endResetModel();
 }
@@ -36,7 +36,7 @@ void FileListModel::setArchive(const VpArchive* archive)
 void FileListModel::setEntries(std::vector<int> entries)
 {
     beginResetModel();
-    m_entries = m_archive ? std::move(entries) : std::vector<int>();
+    m_entries = m_document ? std::move(entries) : std::vector<int>();
     endResetModel();
 }
 
@@ -62,14 +62,14 @@ QVariant FileListModel::data(const QModelIndex& index, int role) const
     const int entry = entryAt(index);
     if (entry < 0)
         return {};
-    const VpEntry& e = m_archive->entries()[entry];
+    const VpDocFile& e = m_document->files()[entry];
 
     if (role == Qt::DisplayRole || role == SortRole) {
         switch (index.column()) {
         case NameColumn:
             return e.name;
         case PathColumn:
-            return QDir::toNativeSeparators(m_archive->folderPath(e.folder));
+            return QDir::toNativeSeparators(m_document->folderPath(e.folder));
         case TypeColumn:
             return typeName(e.name);
         case SizeColumn:

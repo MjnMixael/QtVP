@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-#include "Core/VpArchive.h"
+#include "Core/VpDocument.h"
 #include "Previews/AnimationDecoders.h"
 #include "Previews/ImageDecoders.h"
 
@@ -78,40 +78,41 @@ PreviewContent animationPreview(const QString& label, DecodedAnimation& animatio
 }
 
 // The engine finds files by name anywhere, but EFF frames normally sit next to the EFF
-int findEntry(const VpArchive& archive, int folder, const QString& name)
+int findFile(const VpDocument& document, int folder, const QString& name)
 {
-    for (const int entry : archive.folders()[folder].entries) {
-        if (archive.entries()[entry].name.compare(name, Qt::CaseInsensitive) == 0)
-            return entry;
-    }
-    for (int entry = 0; entry < int(archive.entries().size()); ++entry) {
-        if (archive.entries()[entry].name.compare(name, Qt::CaseInsensitive) == 0)
-            return entry;
+    const int nearby = document.findFile(folder, name);
+    if (nearby >= 0)
+        return nearby;
+
+    const std::vector<VpDocFile>& files = document.files();
+    for (int file = 0; file < int(files.size()); ++file) {
+        if (!files[file].removed && files[file].name.compare(name, Qt::CaseInsensitive) == 0
+            && document.isFolderLive(files[file].folder))
+            return file;
     }
     return -1;
 }
 
-PreviewContent effPreview(const VpArchive& archive, int entry)
+PreviewContent effPreview(const PreviewLoader::Request& request)
 {
-    const PreviewLoader::EffInfo eff = PreviewLoader::readEff(archive, entry);
-    if (!eff.error.isEmpty())
-        return PreviewContent::fromMessage(eff.error);
+    if (!request.effError.isEmpty())
+        return PreviewContent::fromMessage(request.effError);
 
     DecodedAnimation animation;
-    for (const int frame : eff.frames) {
-        const QString frameName = archive.entries()[frame].name;
+    for (size_t i = 0; i < request.effFrames.size(); ++i) {
         QString details;
         QString error;
         QSize size;
-        const QByteArray frameData = archive.readEntry(frame, &error);
-        const QImage image = error.isEmpty() ? decodeImage(eff.type, frameData, &details, &error, &size) : QImage();
+        const QByteArray frameData = request.effFrames[i].read(&error);
+        const QImage image = error.isEmpty() ? decodeImage(request.effType, frameData, &details, &error, &size) : QImage();
         if (image.isNull())
-            return PreviewContent::fromMessage(tr("Frame %1: %2").arg(frameName, error));
+            return PreviewContent::fromMessage(tr("Frame %1: %2").arg(i).arg(error));
         animation.frames.push_back(image);
     }
 
-    animation.durations.assign(animation.frames.size(), 1000 / eff.fps);
-    animation.details = tr("%1 %2 frames at %3 fps").arg(eff.frames.size()).arg(eff.type.toUpper()).arg(eff.fps);
+    animation.durations.assign(animation.frames.size(), 1000 / request.effFps);
+    animation.details = tr("%1 %2 frames at %3 fps").arg(request.effFrames.size())
+        .arg(request.effType.toUpper()).arg(request.effFps);
     return animationPreview("EFF", animation);
 }
 
@@ -246,9 +247,26 @@ PreviewContent soundPreview(const QString& ext, const QByteArray& data)
 
 } // namespace
 
-PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
+PreviewLoader::Request PreviewLoader::request(const VpDocument& document, int file)
 {
-    const QString name = archive.entries()[entry].name;
+    Request request;
+    request.name = document.files()[file].name;
+    request.source = document.files()[file].source;
+
+    if (QFileInfo(request.name).suffix().compare("eff", Qt::CaseInsensitive) == 0) {
+        const EffInfo eff = readEff(document, file);
+        request.effType = eff.type;
+        request.effFps = eff.fps;
+        request.effError = eff.error;
+        for (const int frame : eff.frames)
+            request.effFrames.push_back(document.files()[frame].source);
+    }
+    return request;
+}
+
+PreviewContent PreviewLoader::load(const Request& request)
+{
+    const QString name = request.name;
     const QString ext = QFileInfo(name).suffix().toLower();
 
     static const QStringList textTypes{ "tbl", "tbm", "fs2", "fc2", "lua", "sdr", "vert", "frag", "geom",
@@ -263,12 +281,12 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
     }
 
     QString error;
-    const QByteArray data = archive.readEntry(entry, &error);
+    const QByteArray data = request.source.read(&error);
     PreviewContent content;
     if (!error.isEmpty()) {
         content = PreviewContent::fromMessage(tr("Could not read the file: %1").arg(error));
     } else if (ext == "eff") {
-        content = effPreview(archive, entry);
+        content = effPreview(request);
     } else if (ext == "wav" || ext == "ogg") {
         content = soundPreview(ext, data);
     } else if (textTypes.contains(ext)) {
@@ -289,11 +307,11 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
 
 // An EFF is a small text file naming the frame type, count, and rate. The frames
 // are separate images called <name>_0000.<type>, <name>_0001.<type>, and so on.
-PreviewLoader::EffInfo PreviewLoader::readEff(const VpArchive& archive, int entry)
+PreviewLoader::EffInfo PreviewLoader::readEff(const VpDocument& document, int file)
 {
     EffInfo info;
     QString error;
-    const QByteArray data = archive.readEntry(entry, &error);
+    const QByteArray data = document.files()[file].source.read(&error);
     if (!error.isEmpty()) {
         info.error = tr("Could not read the file: %1").arg(error);
         return info;
@@ -321,11 +339,11 @@ PreviewLoader::EffInfo PreviewLoader::readEff(const VpArchive& archive, int entr
         return info;
     }
 
-    const VpEntry& eff = archive.entries()[entry];
+    const VpDocFile& eff = document.files()[file];
     const QString base = QFileInfo(eff.name).completeBaseName();
     for (int i = 0; i < frameCount; ++i) {
         const QString frameName = QString("%1_%2.%3").arg(base).arg(i, 4, 10, QChar('0')).arg(info.type);
-        const int frame = findEntry(archive, eff.folder, frameName);
+        const int frame = findFile(document, eff.folder, frameName);
         if (frame < 0) {
             info.frames.clear();
             info.error = tr("Frame %1 is not in this VP.").arg(frameName);

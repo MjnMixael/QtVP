@@ -91,11 +91,6 @@ public:
     // Feeds the bytes exactly as stored, so LZ41 entries stay compressed
     bool streamRaw(int entry, const Sink& sink, QString* error) const;
 
-    // Writes each entry under targetDir at its path relative to baseFolder,
-    // restoring timestamps. Failures are collected and the rest carry on.
-    ExtractResult extract(const std::vector<int>& entries, const QString& targetDir,
-        int baseFolder = RootFolder, const ProgressFn& progress = {}) const;
-
 private:
     struct Lz41Info
     {
@@ -110,8 +105,6 @@ private:
     int childFolder(int parent, const QString& name);
     bool readAt(qint64 pos, char* dst, qint64 length) const;
     Kind probeLocked(int entry, Lz41Info* info, QString* error) const;
-    bool extractOne(int entry, const QString& outPath, QString* error) const;
-    QString safeRelativePath(int entry, int baseFolder) const;
 
     QString m_path;
     QString m_error;

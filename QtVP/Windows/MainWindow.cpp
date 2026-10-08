@@ -2,7 +2,7 @@
 #include "ui_MainWindow.h"
 
 #include "Icons.h"
-#include "Core/VpArchive.h"
+#include "Core/VpDocument.h"
 #include "Models/FileListModel.h"
 #include "Models/FolderTreeModel.h"
 #include "Previews/PreviewLoader.h"
@@ -37,7 +37,6 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
-#include <numeric>
 
 namespace {
 
@@ -117,7 +116,7 @@ QString MainWindow::openFolderRoot()
 void MainWindow::openSelected(bool chooseApp)
 {
     const std::vector<int> entries = selectedEntries();
-    if (!m_archive || entries.empty())
+    if (!m_document || entries.empty())
         return;
 
     if (entries.size() > 10) {
@@ -139,12 +138,12 @@ void MainWindow::openSelected(bool chooseApp)
 
     for (size_t i = 0; i < entries.size(); ++i) {
         const int entry = entries[i];
-        const VpEntry& e = m_archive->entries()[entry];
+        const VpDocFile& e = m_document->files()[entry];
         const QString dir = QDir(root).filePath(QString::number(i));
 
         std::vector<int> files{ entry };
         if (QFileInfo(e.name).suffix().compare("eff", Qt::CaseInsensitive) == 0) {
-            const PreviewLoader::EffInfo eff = PreviewLoader::readEff(*m_archive, entry);
+            const PreviewLoader::EffInfo eff = PreviewLoader::readEff(*m_document, entry);
             files.insert(files.end(), eff.frames.begin(), eff.frames.end());
             if (!eff.error.isEmpty())
                 errors << tr("%1: %2").arg(e.name, eff.error);
@@ -153,7 +152,7 @@ void MainWindow::openSelected(bool chooseApp)
         QApplication::setOverrideCursor(Qt::WaitCursor);
         bool extracted = true;
         for (const int file : files) {
-            const VpArchive::ExtractResult result = m_archive->extract({ file }, dir, m_archive->entries()[file].folder);
+            const VpDocument::ExtractResult result = m_document->extract({ file }, dir, m_document->files()[file].folder);
             if (result.extracted != 1) {
                 errors << result.errors;
                 if (file == entry)
@@ -181,10 +180,10 @@ void MainWindow::openSelected(bool chooseApp)
 
 MainWindow::~MainWindow()
 {
-    // The models outlive this destructor as child objects; keep them off the archive
+    // The models outlive this destructor as child objects; keep them off the document
     waitForPreviewLoad();
-    m_folderModel->setArchive(nullptr);
-    m_fileModel->setArchive(nullptr);
+    m_folderModel->setDocument(nullptr);
+    m_fileModel->setDocument(nullptr);
     delete ui;
 }
 
@@ -200,13 +199,13 @@ void MainWindow::openVp(const QString& path)
         return;
     }
 
-    // Detach the models and finish any preview load before the old archive is destroyed
+    // Detach the models and finish any preview load before the old document is destroyed
     waitForPreviewLoad();
-    m_folderModel->setArchive(nullptr);
-    m_fileModel->setArchive(nullptr);
-    m_archive = std::move(archive);
-    m_folderModel->setArchive(m_archive.get());
-    m_fileModel->setArchive(m_archive.get());
+    m_folderModel->setDocument(nullptr);
+    m_fileModel->setDocument(nullptr);
+    m_document = std::make_unique<VpDocument>(std::move(archive));
+    m_folderModel->setDocument(m_document.get());
+    m_fileModel->setDocument(m_document.get());
 
     // Start on <All files> with the top-level folders open
     ui->folderTree->expandToDepth(0);
@@ -217,7 +216,7 @@ void MainWindow::openVp(const QString& path)
     setWindowTitle(tr("QtVP - %1").arg(QFileInfo(path).fileName()));
 
     QString status = tr("Opened %1").arg(QDir::toNativeSeparators(path));
-    const QStringList warnings = m_archive->warnings();
+    const QStringList warnings = m_document->archive()->warnings();
     if (!warnings.isEmpty())
         status += tr(". Warning: %1").arg(warnings.join(' '));
     statusBar()->showMessage(status);
@@ -228,9 +227,9 @@ void MainWindow::openVp(const QString& path)
 void MainWindow::closeVp()
 {
     waitForPreviewLoad();
-    m_folderModel->setArchive(nullptr);
-    m_fileModel->setArchive(nullptr);
-    m_archive.reset();
+    m_folderModel->setDocument(nullptr);
+    m_fileModel->setDocument(nullptr);
+    m_document.reset();
     m_currentFolder = FolderTreeModel::NoFolder;
     resetPreview();
 
@@ -402,7 +401,7 @@ void MainWindow::saveLayout()
 
 void MainWindow::updateActions()
 {
-    const bool hasVp = m_archive != nullptr;
+    const bool hasVp = m_document != nullptr;
     ui->actionCloseVp->setEnabled(hasVp);
     ui->actionExtractToDir->setEnabled(hasVp);
     const bool hasSelection = hasVp && ui->fileList->selectionModel()->hasSelection();
@@ -457,10 +456,10 @@ void MainWindow::startPreviewLoad()
 {
     m_previewQueued = false;
     m_loadingRequest = m_previewRequest;
-    const VpArchive* archive = m_archive.get();
-    const int entry = m_previewEntry;
-    m_previewWatcher->setFuture(QtConcurrent::run([archive, entry] {
-        return PreviewLoader::load(*archive, entry);
+    // Gathered here so the worker never reads the document while it is being edited
+    const PreviewLoader::Request request = PreviewLoader::request(*m_document, m_previewEntry);
+    m_previewWatcher->setFuture(QtConcurrent::run([request] {
+        return PreviewLoader::load(request);
     }));
 }
 
@@ -480,9 +479,9 @@ void MainWindow::onPreviewLoaded()
 
 void MainWindow::showPreviewSpinner()
 {
-    if (!m_archive || m_previewEntry < 0)
+    if (!m_document || m_previewEntry < 0)
         return;
-    const QString name = m_archive->entries()[m_previewEntry].name;
+    const QString name = m_document->files()[m_previewEntry].name;
     m_previewSpinnerShown = true;
     ui->previewArea->setLoading(name);
     if (previewWindowOpen())
@@ -507,7 +506,7 @@ void MainWindow::resetPreview()
     showPreview(PreviewContent::fromMessage(tr("Select a file to preview")));
 }
 
-// A running load reads the archive, so it has to finish before the archive is destroyed
+// A running load reads through the document's archive, so it has to finish before the document is destroyed
 void MainWindow::waitForPreviewLoad()
 {
     m_previewQueued = false;
@@ -537,7 +536,7 @@ void MainWindow::openPreviewWindow()
 
     if (!m_previewWindow->isVisible()) {
         if (m_previewSpinnerShown)
-            m_previewWindow->setLoading(m_archive->entries()[m_previewEntry].name);
+            m_previewWindow->setLoading(m_document->files()[m_previewEntry].name);
         else
             m_previewWindow->setContent(m_preview);
     }
@@ -548,7 +547,7 @@ void MainWindow::openPreviewWindow()
 
 void MainWindow::updateSelectionStatus()
 {
-    if (!m_archive) {
+    if (!m_document) {
         m_selectionLabel->clear();
         return;
     }
@@ -562,7 +561,7 @@ void MainWindow::updateSelectionStatus()
 
     qint64 bytes = 0;
     for (const int entry : selected)
-        bytes += m_archive->entries()[entry].size;
+        bytes += m_document->files()[entry].size;
     m_selectionLabel->setText(tr("%1 of %2 selected (%3)")
         .arg(selected.size()).arg(shown).arg(QLocale().formattedDataSize(bytes)));
 }
@@ -573,10 +572,9 @@ void MainWindow::showFolder(const QModelIndex& index)
 
     std::vector<int> entries;
     if (m_currentFolder == FolderTreeModel::AllFiles) {
-        entries.resize(m_archive->entries().size());
-        std::iota(entries.begin(), entries.end(), 0);
+        entries = m_document->filesUnder(VpDocument::RootFolder);
     } else if (m_currentFolder >= 0) {
-        entries = m_archive->folders()[m_currentFolder].entries;
+        entries = m_document->folders()[m_currentFolder].files;
     }
 
     m_fileModel->setEntries(std::move(entries));
@@ -620,19 +618,19 @@ std::vector<int> MainWindow::selectedEntries() const
 // target; a folder is recreated there with its subfolders.
 bool MainWindow::extractionSet(std::vector<int>& entries, int& baseFolder) const
 {
-    if (!m_archive)
+    if (!m_document)
         return false;
 
     const std::vector<int> selected = selectedEntries();
     if (!selected.empty() && !ui->folderTree->hasFocus()) {
         entries = selected;
-        baseFolder = m_currentFolder >= 0 ? m_currentFolder : VpArchive::RootFolder;
+        baseFolder = m_currentFolder >= 0 ? m_currentFolder : VpDocument::RootFolder;
     } else if (m_currentFolder >= 0) {
-        entries = m_archive->entriesUnder(m_currentFolder);
-        baseFolder = m_archive->folders()[m_currentFolder].parent;
+        entries = m_document->filesUnder(m_currentFolder);
+        baseFolder = m_document->folders()[m_currentFolder].parent;
     } else {
-        entries = m_archive->entriesUnder(VpArchive::RootFolder);
-        baseFolder = VpArchive::RootFolder;
+        entries = m_document->filesUnder(VpDocument::RootFolder);
+        baseFolder = VpDocument::RootFolder;
     }
 
     if (entries.empty())
@@ -644,7 +642,7 @@ void MainWindow::extractTo(const QString& target, std::vector<int> entries, int 
 {
     const QDir dir(target);
     const QString where = QDir::toNativeSeparators(target);
-    auto exists = [&](int entry) { return QFileInfo::exists(dir.filePath(m_archive->entryPath(entry, baseFolder))); };
+    auto exists = [&](int entry) { return QFileInfo::exists(dir.filePath(m_document->filePath(entry, baseFolder))); };
 
     const int existing = int(std::count_if(entries.begin(), entries.end(), exists));
     if (existing > 0) {
@@ -671,7 +669,7 @@ void MainWindow::extractTo(const QString& target, std::vector<int> entries, int 
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(500);
 
-    const VpArchive::ExtractResult result = m_archive->extract(entries, target, baseFolder,
+    const VpDocument::ExtractResult result = m_document->extract(entries, target, baseFolder,
         [&](int done, int, const QString& path) {
             progress.setValue(done);
             if (!path.isEmpty())
@@ -698,7 +696,7 @@ void MainWindow::extractTo(const QString& target, std::vector<int> entries, int 
 // Fine for the usual handful; a huge drag blocks until it is written out.
 QList<QUrl> MainWindow::extractForDrag(const std::vector<int>& entries)
 {
-    if (!m_archive || entries.empty())
+    if (!m_document || entries.empty())
         return {};
 
     if (!m_dragDir)
@@ -716,13 +714,13 @@ QList<QUrl> MainWindow::extractForDrag(const std::vector<int>& entries)
     QStringList errors;
     QHash<QString, int> nameCounts;
     for (const int entry : entries) {
-        const VpEntry& e = m_archive->entries()[entry];
+        const VpDocFile& e = m_document->files()[entry];
 
         // Same-named files from different folders (in <All files>) each get their own subfolder
         const int seen = nameCounts[e.name.toLower()]++;
         const QString dir = seen == 0 ? dragRoot : dragRoot + QString("/~%1").arg(seen);
 
-        const VpArchive::ExtractResult result = m_archive->extract({ entry }, dir, e.folder);
+        const VpDocument::ExtractResult result = m_document->extract({ entry }, dir, e.folder);
         if (result.extracted == 1)
             urls << QUrl::fromLocalFile(QDir(dir).filePath(e.name));
         else
@@ -802,7 +800,7 @@ void MainWindow::onLoadVp()
 void MainWindow::onExtractToDir()
 {
     std::vector<int> entries;
-    int baseFolder = VpArchive::RootFolder;
+    int baseFolder = VpDocument::RootFolder;
     if (!extractionSet(entries, baseFolder))
         return;
 

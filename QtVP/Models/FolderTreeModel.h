@@ -5,7 +5,7 @@
 
 #include <vector>
 
-class VpArchive;
+class VpDocument;
 
 // The VP's folders, alphabetized, under an <All files> node that comes first
 class FolderTreeModel : public QAbstractItemModel
@@ -18,8 +18,9 @@ public:
 
     explicit FolderTreeModel(QObject* parent = nullptr);
 
-    // The archive must outlive the model or be replaced with nullptr first
-    void setArchive(const VpArchive* archive);
+    // The document must outlive the model or be replaced with nullptr first.
+    // Call again with the same document after edits to rebuild.
+    void setDocument(const VpDocument* document);
 
     // AllFiles, a folder index, or NoFolder for an invalid index
     int folderAt(const QModelIndex& index) const;
@@ -32,9 +33,10 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
 
 private:
-    const VpArchive* m_archive = nullptr;
+    const VpDocument* m_document = nullptr;
     std::vector<std::vector<int>> m_children;   // sorted subfolders of each folder
     std::vector<int> m_row;                     // each folder's row under its parent
+    int m_fileCount = 0;
     QIcon m_folderIcon;
     QIcon m_allFilesIcon;
 };

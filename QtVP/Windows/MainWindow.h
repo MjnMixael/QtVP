@@ -19,7 +19,7 @@ class QModelIndex;
 class QSortFilterProxyModel;
 class QTemporaryDir;
 class QTimer;
-class VpArchive;
+class VpDocument;
 namespace Ui { class MainWindow; }
 
 class MainWindow : public QMainWindow
@@ -79,7 +79,7 @@ private:
     void onAbout();
 
     Ui::MainWindow* ui;
-    std::unique_ptr<VpArchive> m_archive;
+    std::unique_ptr<VpDocument> m_document;
     FolderTreeModel* m_folderModel = nullptr;
     FileListModel* m_fileModel = nullptr;
     QSortFilterProxyModel* m_fileProxy = nullptr;

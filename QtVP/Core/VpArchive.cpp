@@ -1,10 +1,6 @@
 #include "VpArchive.h"
 
-#include <QDateTime>
-#include <QDir>
-#include <QFileInfo>
 #include <QMutexLocker>
-#include <QSaveFile>
 #include <QtEndian>
 
 #include <algorithm>
@@ -389,95 +385,4 @@ QByteArray VpArchive::readEntry(int entry, QString* error) const
         return true;
     }, error);
     return ok ? result : QByteArray();
-}
-
-VpArchive::ExtractResult VpArchive::extract(const std::vector<int>& entries, const QString& targetDir,
-    int baseFolder, const ProgressFn& progress) const
-{
-    ExtractResult result;
-    const QDir target(targetDir);
-    const int total = int(entries.size());
-
-    for (int i = 0; i < total; ++i) {
-        const int entry = entries[i];
-        const QString relative = safeRelativePath(entry, baseFolder);
-
-        if (progress && !progress(i, total, relative.isEmpty() ? m_entries[entry].name : relative)) {
-            result.canceled = true;
-            return result;
-        }
-
-        if (relative.isEmpty()) {
-            result.errors << tr("%1: the name is not a valid file name, skipped.").arg(entryPath(entry));
-            continue;
-        }
-
-        QString error;
-        if (extractOne(entry, target.filePath(relative), &error))
-            ++result.extracted;
-        else
-            result.errors << tr("%1: %2").arg(relative, error);
-    }
-
-    if (progress)
-        progress(total, total, QString());
-    return result;
-}
-
-bool VpArchive::extractOne(int entry, const QString& outPath, QString* error) const
-{
-    const QString dir = QFileInfo(outPath).absolutePath();
-    if (!QDir().mkpath(dir)) {
-        *error = tr("Could not create the folder %1.").arg(QDir::toNativeSeparators(dir));
-        return false;
-    }
-
-    // QSaveFile leaves any existing file alone unless the whole entry is written
-    QSaveFile out(outPath);
-    if (!out.open(QIODevice::WriteOnly)) {
-        *error = out.errorString();
-        return false;
-    }
-
-    QString writeError;
-    const bool ok = streamEntry(entry, [&](const char* data, qint64 length) {
-        if (out.write(data, length) == length)
-            return true;
-        writeError = out.errorString();
-        return false;
-    }, error);
-
-    if (!ok) {
-        out.cancelWriting();
-        if (!writeError.isEmpty())
-            *error = writeError;
-        return false;
-    }
-    if (!out.commit()) {
-        *error = out.errorString();
-        return false;
-    }
-
-    const quint32 timestamp = m_entries[entry].timestamp;
-    if (timestamp != 0) {
-        QFile written(outPath);
-        if (written.open(QIODevice::ReadWrite | QIODevice::ExistingOnly))
-            written.setFileTime(QDateTime::fromSecsSinceEpoch(timestamp), QFileDevice::FileModificationTime);
-    }
-    return true;
-}
-
-// Empty if any component could escape the target folder or is not a legal file name
-QString VpArchive::safeRelativePath(int entry, int baseFolder) const
-{
-    QStringList parts{ m_entries[entry].name };
-    int folder = m_entries[entry].folder;
-    for (; folder > RootFolder && folder != baseFolder; folder = m_folders[folder].parent)
-        parts.prepend(m_folders[folder].name);
-
-    for (const QString& part : parts) {
-        if (!isSafeComponent(part))
-            return QString();
-    }
-    return parts.join('/');
 }

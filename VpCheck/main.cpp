@@ -97,14 +97,16 @@ int verify(const QStringList& paths)
 
 int extract(const QString& path, const QString& target)
 {
-    VpArchive vp;
-    if (!openArchive(vp, path))
+    auto archive = std::make_unique<VpArchive>();
+    if (!openArchive(*archive, path))
         return 1;
+    const VpDocument document(std::move(archive));
 
-    const VpArchive::ExtractResult result = vp.extract(vp.entriesUnder(VpArchive::RootFolder), target);
+    const std::vector<int> files = document.filesUnder(VpDocument::RootFolder);
+    const VpDocument::ExtractResult result = document.extract(files, target);
     for (const QString& error : result.errors)
         err << "  " << error << "\n";
-    out << "Extracted " << result.extracted << " of " << vp.entries().size() << " files to "
+    out << "Extracted " << result.extracted << " of " << files.size() << " files to "
         << QDir::toNativeSeparators(target) << "\n";
     return result.errors.isEmpty() ? 0 : 1;
 }

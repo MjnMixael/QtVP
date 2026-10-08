@@ -7,7 +7,7 @@
 #include <functional>
 #include <vector>
 
-class VpArchive;
+class VpDocument;
 
 // A flat list of VP entries: the files in one folder, or every file
 class FileListModel : public QAbstractTableModel
@@ -25,8 +25,9 @@ public:
 
     explicit FileListModel(QObject* parent = nullptr);
 
-    // The archive must outlive the model or be replaced with nullptr first
-    void setArchive(const VpArchive* archive);
+    // The document must outlive the model or be replaced with nullptr first.
+    // Call again with the same document after edits to rebuild.
+    void setDocument(const VpDocument* document);
     void setEntries(std::vector<int> entries);
     void setDragProvider(DragProvider provider) { m_dragProvider = std::move(provider); }
 
@@ -42,7 +43,7 @@ public:
     QMimeData* mimeData(const QModelIndexList& indexes) const override;
 
 private:
-    const VpArchive* m_archive = nullptr;
+    const VpDocument* m_document = nullptr;
     std::vector<int> m_entries;
     DragProvider m_dragProvider;
 };
