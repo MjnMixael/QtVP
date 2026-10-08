@@ -45,6 +45,7 @@ private:
     void updateActions();
     void updateSelectionStatus();
     void updatePreview();
+    void updatePlaybackButtons();
     void resetPreview();
     void openPreviewWindow();
 

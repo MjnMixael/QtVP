@@ -107,6 +107,7 @@
     <ClCompile Include="Core\VpArchive.cpp" />
     <ClCompile Include="Models\FileListModel.cpp" />
     <ClCompile Include="Models\FolderTreeModel.cpp" />
+    <ClCompile Include="Previews\AnimationDecoders.cpp" />
     <ClCompile Include="Previews\ImageDecoders.cpp" />
     <ClCompile Include="Previews\PreviewLoader.cpp" />
     <ClCompile Include="Previews\PreviewWidget.cpp" />
@@ -119,6 +120,7 @@
     </ClCompile>
     <ClInclude Include="Theme.h" />
     <ClInclude Include="Core\VpArchive.h" />
+    <ClInclude Include="Previews\AnimationDecoders.h" />
     <ClInclude Include="Previews\ImageDecoders.h" />
     <ClInclude Include="Previews\PreviewContent.h" />
     <ClInclude Include="Previews\PreviewLoader.h" />

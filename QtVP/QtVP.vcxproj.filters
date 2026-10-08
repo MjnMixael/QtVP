@@ -47,6 +47,9 @@
     <ClCompile Include="Models\FolderTreeModel.cpp">
       <Filter>Source Files\Models</Filter>
     </ClCompile>
+    <ClCompile Include="Previews\AnimationDecoders.cpp">
+      <Filter>Source Files\Previews</Filter>
+    </ClCompile>
     <ClCompile Include="Previews\ImageDecoders.cpp">
       <Filter>Source Files\Previews</Filter>
     </ClCompile>
@@ -75,6 +78,9 @@
     </ClInclude>
     <ClInclude Include="Core\VpArchive.h">
       <Filter>Source Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Previews\AnimationDecoders.h">
+      <Filter>Source Files\Previews</Filter>
     </ClInclude>
     <ClInclude Include="Previews\ImageDecoders.h">
       <Filter>Source Files\Previews</Filter>

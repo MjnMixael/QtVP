@@ -73,6 +73,7 @@ MainWindow::MainWindow(QWidget* parent)
     restoreLayout();
     updateRecentMenu();
     updateActions();
+    updatePlaybackButtons();
     updateSelectionStatus();
 
     statusBar()->showMessage(tr("Ready"));
@@ -243,6 +244,9 @@ void MainWindow::setupConnections()
     connect(ui->fileList->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updatePreview);
     connect(ui->fileList, &QAbstractItemView::doubleClicked, this, &MainWindow::openPreviewWindow);
     connect(ui->popOutButton, &QToolButton::clicked, this, &MainWindow::openPreviewWindow);
+    connect(ui->playButton, &QToolButton::clicked, ui->previewArea, &PreviewWidget::togglePlay);
+    connect(ui->stopButton, &QToolButton::clicked, ui->previewArea, &PreviewWidget::stop);
+    connect(ui->previewArea, &PreviewWidget::playbackChanged, this, &MainWindow::updatePlaybackButtons);
     connect(m_fileProxy, &QAbstractItemModel::modelReset, this, &MainWindow::updateSelectionStatus);
     connect(m_fileProxy, &QAbstractItemModel::rowsInserted, this, &MainWindow::updateSelectionStatus);
     connect(m_fileProxy, &QAbstractItemModel::rowsRemoved, this, &MainWindow::updateSelectionStatus);
@@ -278,8 +282,16 @@ void MainWindow::updateActions()
 
     // Not wired up yet
     ui->actionNewVp->setEnabled(false);
-    ui->playButton->setEnabled(false);
-    ui->stopButton->setEnabled(false);
+}
+
+void MainWindow::updatePlaybackButtons()
+{
+    const bool playable = ui->previewArea->isPlayable();
+    const bool playing = ui->previewArea->isPlaying();
+    ui->playButton->setEnabled(playable);
+    ui->stopButton->setEnabled(playable);
+    ui->playButton->setIcon(style()->standardIcon(playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+    ui->playButton->setToolTip(playing ? tr("Pause") : tr("Play"));
 }
 
 // Previews the selected file when exactly one is selected

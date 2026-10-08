@@ -3,6 +3,7 @@
 #include <QLabel>
 #include <QPainter>
 #include <QStackedLayout>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -81,6 +82,10 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     m_info->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_info->hide();
 
+    m_frameLabel = new QLabel(this);
+    m_frameLabel->setAlignment(Qt::AlignCenter);
+    m_frameLabel->hide();
+
     m_stack = new QStackedLayout;
     m_stack->addWidget(m_message);
     m_stack->addWidget(m_imageView);
@@ -90,13 +95,32 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     layout->setSpacing(2);
     layout->addLayout(m_stack, 1);
     layout->addWidget(m_info);
+    layout->addWidget(m_frameLabel);
+
+    // Single-shot, restarted with each frame's own duration
+    m_timer = new QTimer(this);
+    m_timer->setSingleShot(true);
+    connect(m_timer, &QTimer::timeout, this, &PreviewWidget::nextFrame);
 
     setContent(PreviewContent::fromMessage(tr("Select a file to preview")));
 }
 
 void PreviewWidget::setContent(const PreviewContent& content)
 {
-    if (content.kind == PreviewContent::Kind::Image) {
+    m_timer->stop();
+    m_frames.clear();
+    m_durations.clear();
+    m_frame = 0;
+
+    if (content.kind == PreviewContent::Kind::Animation && !content.frames.empty()) {
+        m_frames = content.frames;
+        m_durations = content.durations;
+        m_durations.resize(m_frames.size(), 100);
+        m_stack->setCurrentWidget(m_imageView);
+        showFrame(0);
+        if (isPlayable())
+            m_timer->start(m_durations[0]);
+    } else if (content.kind == PreviewContent::Kind::Image) {
         m_imageView->setImage(content.image);
         m_stack->setCurrentWidget(m_imageView);
     } else {
@@ -107,4 +131,46 @@ void PreviewWidget::setContent(const PreviewContent& content)
 
     m_info->setText(content.info);
     m_info->setVisible(!content.info.isEmpty());
+    m_frameLabel->setVisible(isPlayable());
+    emit playbackChanged();
+}
+
+bool PreviewWidget::isPlaying() const
+{
+    return m_timer->isActive();
+}
+
+// Play and pause
+void PreviewWidget::togglePlay()
+{
+    if (!isPlayable())
+        return;
+    if (isPlaying())
+        m_timer->stop();
+    else
+        m_timer->start(m_durations[m_frame]);
+    emit playbackChanged();
+}
+
+// Stops and goes back to the first frame
+void PreviewWidget::stop()
+{
+    if (!isPlayable())
+        return;
+    m_timer->stop();
+    showFrame(0);
+    emit playbackChanged();
+}
+
+void PreviewWidget::showFrame(size_t index)
+{
+    m_frame = index;
+    m_imageView->setImage(m_frames[index]);
+    m_frameLabel->setText(tr("Frame %1 of %2").arg(index + 1).arg(m_frames.size()));
+}
+
+void PreviewWidget::nextFrame()
+{
+    showFrame((m_frame + 1) % m_frames.size());
+    m_timer->start(m_durations[m_frame]);
 }
