@@ -215,6 +215,9 @@
     <property name="title">
      <string>&amp;Action</string>
     </property>
+    <addaction name="actionOpen"/>
+    <addaction name="actionOpenWith"/>
+    <addaction name="separator"/>
     <addaction name="actionExtractToDir"/>
     <addaction name="separator"/>
     <addaction name="actionFind"/>
@@ -301,6 +304,22 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+E</string>
+   </property>
+  </action>
+  <action name="actionOpen">
+   <property name="text">
+    <string>&amp;Open</string>
+   </property>
+   <property name="toolTip">
+    <string>Open the selected files in their usual app (double-click or Enter)</string>
+   </property>
+  </action>
+  <action name="actionOpenWith">
+   <property name="text">
+    <string>Open &amp;With...</string>
+   </property>
+   <property name="toolTip">
+    <string>Choose which app opens the selected files</string>
    </property>
   </action>
   <action name="actionOptions">

@@ -91,52 +91,27 @@ int findEntry(const VpArchive& archive, int folder, const QString& name)
     return -1;
 }
 
-// An EFF is a small text file naming the frame type, count, and rate. The frames
-// are separate images called <name>_0000.<type>, <name>_0001.<type>, and so on.
-PreviewContent effPreview(const VpArchive& archive, int entry, const QByteArray& data)
+PreviewContent effPreview(const VpArchive& archive, int entry)
 {
-    QString type;
-    int frameCount = 0;
-    int fps = 15;
-    for (const QByteArray& raw : data.split('\n')) {
-        const QString line = QString::fromLatin1(raw).trimmed();
-        const QString value = line.section(':', 1).trimmed();
-        if (line.startsWith("$Type:", Qt::CaseInsensitive))
-            type = value.toLower();
-        else if (line.startsWith("$Frames:", Qt::CaseInsensitive))
-            frameCount = value.toInt();
-        else if (line.startsWith("$FPS:", Qt::CaseInsensitive))
-            fps = std::max(1, value.toInt());
-    }
-
-    static const QStringList frameTypes{ "dds", "pcx", "tga", "png", "jpg" };
-    if (!frameTypes.contains(type))
-        return PreviewContent::fromMessage(tr("The EFF file has an unsupported frame type \"%1\".").arg(type));
-    if (frameCount <= 0 || frameCount > MaxEffFrames)
-        return PreviewContent::fromMessage(tr("The EFF file lists %1 frames.").arg(frameCount));
-
-    const VpEntry& eff = archive.entries()[entry];
-    const QString base = QFileInfo(eff.name).completeBaseName();
+    const PreviewLoader::EffInfo eff = PreviewLoader::readEff(archive, entry);
+    if (!eff.error.isEmpty())
+        return PreviewContent::fromMessage(eff.error);
 
     DecodedAnimation animation;
-    for (int i = 0; i < frameCount; ++i) {
-        const QString frameName = QString("%1_%2.%3").arg(base).arg(i, 4, 10, QChar('0')).arg(type);
-        const int frameEntry = findEntry(archive, eff.folder, frameName);
-        if (frameEntry < 0)
-            return PreviewContent::fromMessage(tr("Frame %1 is not in this VP.").arg(frameName));
-
+    for (const int frame : eff.frames) {
+        const QString frameName = archive.entries()[frame].name;
         QString details;
         QString error;
         QSize size;
-        const QByteArray frameData = archive.readEntry(frameEntry, &error);
-        const QImage image = error.isEmpty() ? decodeImage(type, frameData, &details, &error, &size) : QImage();
+        const QByteArray frameData = archive.readEntry(frame, &error);
+        const QImage image = error.isEmpty() ? decodeImage(eff.type, frameData, &details, &error, &size) : QImage();
         if (image.isNull())
             return PreviewContent::fromMessage(tr("Frame %1: %2").arg(frameName, error));
         animation.frames.push_back(image);
     }
 
-    animation.durations.assign(animation.frames.size(), 1000 / fps);
-    animation.details = tr("%1 %2 frames at %3 fps").arg(frameCount).arg(type.toUpper()).arg(fps);
+    animation.durations.assign(animation.frames.size(), 1000 / eff.fps);
+    animation.details = tr("%1 %2 frames at %3 fps").arg(eff.frames.size()).arg(eff.type.toUpper()).arg(eff.fps);
     return animationPreview("EFF", animation);
 }
 
@@ -293,7 +268,7 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
     if (!error.isEmpty()) {
         content = PreviewContent::fromMessage(tr("Could not read the file: %1").arg(error));
     } else if (ext == "eff") {
-        content = effPreview(archive, entry, data);
+        content = effPreview(archive, entry);
     } else if (ext == "wav" || ext == "ogg") {
         content = soundPreview(ext, data);
     } else if (textTypes.contains(ext)) {
@@ -310,4 +285,53 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
 
     content.title = name;
     return content;
+}
+
+// An EFF is a small text file naming the frame type, count, and rate. The frames
+// are separate images called <name>_0000.<type>, <name>_0001.<type>, and so on.
+PreviewLoader::EffInfo PreviewLoader::readEff(const VpArchive& archive, int entry)
+{
+    EffInfo info;
+    QString error;
+    const QByteArray data = archive.readEntry(entry, &error);
+    if (!error.isEmpty()) {
+        info.error = tr("Could not read the file: %1").arg(error);
+        return info;
+    }
+
+    int frameCount = 0;
+    for (const QByteArray& raw : data.split('\n')) {
+        const QString line = QString::fromLatin1(raw).trimmed();
+        const QString value = line.section(':', 1).trimmed();
+        if (line.startsWith("$Type:", Qt::CaseInsensitive))
+            info.type = value.toLower();
+        else if (line.startsWith("$Frames:", Qt::CaseInsensitive))
+            frameCount = value.toInt();
+        else if (line.startsWith("$FPS:", Qt::CaseInsensitive))
+            info.fps = std::max(1, value.toInt());
+    }
+
+    static const QStringList frameTypes{ "dds", "pcx", "tga", "png", "jpg" };
+    if (!frameTypes.contains(info.type)) {
+        info.error = tr("The EFF file has an unsupported frame type \"%1\".").arg(info.type);
+        return info;
+    }
+    if (frameCount <= 0 || frameCount > MaxEffFrames) {
+        info.error = tr("The EFF file lists %1 frames.").arg(frameCount);
+        return info;
+    }
+
+    const VpEntry& eff = archive.entries()[entry];
+    const QString base = QFileInfo(eff.name).completeBaseName();
+    for (int i = 0; i < frameCount; ++i) {
+        const QString frameName = QString("%1_%2.%3").arg(base).arg(i, 4, 10, QChar('0')).arg(info.type);
+        const int frame = findEntry(archive, eff.folder, frameName);
+        if (frame < 0) {
+            info.frames.clear();
+            info.error = tr("Frame %1 is not in this VP.").arg(frameName);
+            return info;
+        }
+        info.frames.push_back(frame);
+    }
+    return info;
 }

@@ -112,6 +112,7 @@
     <ClCompile Include="Previews\ImageDecoders.cpp" />
     <ClCompile Include="Previews\PreviewLoader.cpp" />
     <ClCompile Include="Previews\PreviewWidget.cpp" />
+    <ClCompile Include="Windows\FileOpener.cpp" />
     <ClCompile Include="Windows\MainWindow.cpp" />
     <ClCompile Include="Windows\OptionsDialog.cpp" />
     <ClCompile Include="Windows\PreviewWindow.cpp" />
@@ -126,6 +127,7 @@
     <ClInclude Include="Previews\ImageDecoders.h" />
     <ClInclude Include="Previews\PreviewContent.h" />
     <ClInclude Include="Previews\PreviewLoader.h" />
+    <ClInclude Include="Windows\FileOpener.h" />
     <ClInclude Include="Dependencies\bcdec\bcdec.h" />
     <ClInclude Include="Dependencies\lz4\lz4.h" />
     <QtUic Include="Forms\MainWindow.ui" />

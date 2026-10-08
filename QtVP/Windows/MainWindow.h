@@ -65,6 +65,8 @@ private:
     bool extractionSet(std::vector<int>& entries, int& baseFolder) const;
     void extractTo(const QString& target, std::vector<int> entries, int baseFolder);
     QList<QUrl> extractForDrag(const std::vector<int>& entries);
+    void openSelected(bool chooseApp);
+    static QString openFolderRoot();
 
     void addRecentFile(const QString& path);
     void removeRecentFile(const QString& path);

@@ -7,11 +7,13 @@
 #include "Models/FolderTreeModel.h"
 #include "Previews/PreviewLoader.h"
 #include "Previews/PreviewWidget.h"
+#include "Windows/FileOpener.h"
 #include "Windows/OptionsDialog.h"
 #include "Windows/PreviewWindow.h"
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QDateTime>
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -81,11 +83,86 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->showMessage(tr("Ready"));
 }
 
-// Starting the audio backend takes a moment and has to happen on the UI thread, so it
-// runs behind the splash screen rather than on the first Play
+// Runs behind the splash screen
 void MainWindow::warmUp()
 {
+    // Starting the audio backend takes a moment and has to happen on the UI thread
     ui->previewArea->prepareAudio();
+
+    // Files opened in other apps stay until the next start, so an editor never loses its
+    // file because QtVP closed. Clear out anything older than a day.
+    const QDir openRoot(openFolderRoot());
+    const QDateTime cutoff = QDateTime::currentDateTime().addDays(-1);
+    for (const QFileInfo& folder : openRoot.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (folder.lastModified() < cutoff)
+            QDir(folder.absoluteFilePath()).removeRecursively();
+    }
+}
+
+QString MainWindow::openFolderRoot()
+{
+    return QDir::temp().filePath("QtVP/Open");
+}
+
+// Extracts the selected files to a fresh temp folder and hands each to another app.
+// Each file gets its own subfolder, so names never collide and an EFF keeps its frames beside it.
+void MainWindow::openSelected(bool chooseApp)
+{
+    const std::vector<int> entries = selectedEntries();
+    if (!m_archive || entries.empty())
+        return;
+
+    if (entries.size() > 10) {
+        const auto answer = QMessageBox::question(this, tr("Open"),
+            tr("Open %n files, each in its own app window?", nullptr, int(entries.size())));
+        if (answer != QMessageBox::Yes)
+            return;
+    }
+
+    const QString root = QDir(openFolderRoot()).filePath(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz"));
+    FileOpener opener(this);
+    QStringList errors;
+
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const int entry = entries[i];
+        const VpEntry& e = m_archive->entries()[entry];
+        const QString dir = QDir(root).filePath(QString::number(i));
+
+        std::vector<int> files{ entry };
+        if (QFileInfo(e.name).suffix().compare("eff", Qt::CaseInsensitive) == 0) {
+            const PreviewLoader::EffInfo eff = PreviewLoader::readEff(*m_archive, entry);
+            files.insert(files.end(), eff.frames.begin(), eff.frames.end());
+            if (!eff.error.isEmpty())
+                errors << tr("%1: %2").arg(e.name, eff.error);
+        }
+
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        bool extracted = true;
+        for (const int file : files) {
+            const VpArchive::ExtractResult result = m_archive->extract({ file }, dir, m_archive->entries()[file].folder);
+            if (result.extracted != 1) {
+                errors << result.errors;
+                if (file == entry)
+                    extracted = false;
+            }
+        }
+        QApplication::restoreOverrideCursor();
+
+        if (!extracted)
+            continue;
+        const QString path = QDir(dir).filePath(e.name);
+        if (chooseApp)
+            opener.openWith(path);
+        else
+            opener.open(path);
+    }
+
+    if (!errors.isEmpty()) {
+        QMessageBox box(QMessageBox::Warning, tr("Open"), tr("Some files could not be prepared for opening."),
+            QMessageBox::Ok, this);
+        box.setDetailedText(errors.join('\n'));
+        box.exec();
+    }
 }
 
 MainWindow::~MainWindow()
@@ -234,9 +311,11 @@ void MainWindow::setupModels()
     m_previewSpinnerTimer->setInterval(150);
     connect(m_previewSpinnerTimer, &QTimer::timeout, this, &MainWindow::showPreviewSpinner);
 
-    // Right-click menus reuse the extract action
+    // Right-click menus reuse the main actions
+    auto* separator = new QAction(this);
+    separator->setSeparator(true);
     ui->fileList->setContextMenuPolicy(Qt::ActionsContextMenu);
-    ui->fileList->addAction(ui->actionExtractToDir);
+    ui->fileList->addActions({ ui->actionOpen, ui->actionOpenWith, separator, ui->actionExtractToDir });
     ui->folderTree->setContextMenuPolicy(Qt::ActionsContextMenu);
     ui->folderTree->addAction(ui->actionExtractToDir);
 }
@@ -261,7 +340,12 @@ void MainWindow::setupConnections()
 
     connect(ui->fileList->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updateSelectionStatus);
     connect(ui->fileList->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updatePreview);
-    connect(ui->fileList, &QAbstractItemView::doubleClicked, this, &MainWindow::openPreviewWindow);
+    connect(ui->fileList->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updateActions);
+
+    // Double-click or Enter, like Explorer
+    connect(ui->fileList, &QAbstractItemView::activated, this, [this] { openSelected(false); });
+    connect(ui->actionOpen, &QAction::triggered, this, [this] { openSelected(false); });
+    connect(ui->actionOpenWith, &QAction::triggered, this, [this] { openSelected(true); });
     connect(ui->popOutButton, &QToolButton::clicked, this, &MainWindow::openPreviewWindow);
     connect(ui->playButton, &QToolButton::clicked, ui->previewArea, &PreviewWidget::togglePlay);
     connect(ui->stopButton, &QToolButton::clicked, ui->previewArea, &PreviewWidget::stop);
@@ -297,6 +381,9 @@ void MainWindow::updateActions()
     const bool hasVp = m_archive != nullptr;
     ui->actionCloseVp->setEnabled(hasVp);
     ui->actionExtractToDir->setEnabled(hasVp);
+    const bool hasSelection = hasVp && ui->fileList->selectionModel()->hasSelection();
+    ui->actionOpen->setEnabled(hasSelection);
+    ui->actionOpenWith->setEnabled(hasSelection);
     ui->popOutButton->setEnabled(hasVp);
 
     // Not wired up yet

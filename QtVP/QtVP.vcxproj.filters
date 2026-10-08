@@ -65,6 +65,9 @@
     <ClCompile Include="Windows\PreviewWindow.cpp">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
+    <ClCompile Include="Windows\FileOpener.cpp">
+      <Filter>Source Files\Windows</Filter>
+    </ClCompile>
     <ClCompile Include="Windows\MainWindow.cpp">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
@@ -96,6 +99,9 @@
     </ClInclude>
     <ClInclude Include="Previews\PreviewLoader.h">
       <Filter>Source Files\Previews</Filter>
+    </ClInclude>
+    <ClInclude Include="Windows\FileOpener.h">
+      <Filter>Source Files\Windows</Filter>
     </ClInclude>
     <ClInclude Include="Dependencies\bcdec\bcdec.h">
       <Filter>Dependencies\bcdec</Filter>

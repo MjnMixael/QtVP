@@ -2,6 +2,7 @@
 
 #include <QDialog>
 
+class QLineEdit;
 namespace Ui { class OptionsDialog; }
 
 // Loads the current settings on construction; saves and applies them on OK
@@ -16,5 +17,7 @@ public:
     void accept() override;
 
 private:
+    void browseForTool(QLineEdit* edit, const QString& name);
+
     Ui::OptionsDialog* ui;
 };
