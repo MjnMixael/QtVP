@@ -23,18 +23,19 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 
 ## Current state
 
-- Phase 1 is done and pushed (`658fb96` scaffold, `1299112` VS 2026 retarget).
-- Phase 2 code is written but not yet built or confirmed by the user.
-- Files: `main.cpp` (opens a `.vp` passed on the command line), `Windows\MainWindow.{h,cpp}`, `Forms\MainWindow.ui`, `Core\VpArchive.{h,cpp}`, `Dependencies\lz4\` (upstream LZ4 1.10.0, `lz4.c`/`lz4.h`/`LICENSE` only).
-- `MainWindow` owns a `std::unique_ptr<VpArchive>`. `openVp()` parses into a fresh archive and only replaces the current one on success; failures show a message box with `errorString()`, and `warnings()` go to the status bar. Close VP is wired. Nothing is shown in the tree or list yet (phase 3).
+- Phase 1 is done (`658fb96`, `1299112`). Phase 2 is done (`644f2e3`); the user confirmed VPs open and report their file count.
+- Phase 3 code is written but not yet built or confirmed by the user.
+- Files: `main.cpp` (opens a `.vp` passed on the command line), `Core\VpArchive.{h,cpp}`, `Models\FolderTreeModel.{h,cpp}`, `Models\FileListModel.{h,cpp}`, `Windows\MainWindow.{h,cpp}`, `Windows\OptionsDialog.{h,cpp}`, `Forms\MainWindow.ui`, `Forms\OptionsDialog.ui`, `Dependencies\lz4\` (upstream LZ4 1.10.0, `lz4.c`/`lz4.h`/`LICENSE` only).
+- `MainWindow` owns a `std::unique_ptr<VpArchive>`. `openVp()` parses into a fresh archive and only replaces the current one on success; failures show a message box with `errorString()`, and `warnings()` go to the status bar. The models hold a raw archive pointer, so they are always set to nullptr before an archive is destroyed.
+- `FolderTreeModel`: `<All files> (N)` first, then the folders alphabetized, each showing its direct file count (the tooltip has the recursive count). Internal id is folder index + 1; 0 is `<All files>`.
+- `FileListModel` sits behind a `QSortFilterProxyModel`: Name, Folder (only shown for `<All files>`), Type, Size (stored bytes), Date & Time. `SortRole` gives raw numbers. `mimeData()` calls a drag provider in `MainWindow` that extracts to a temp folder.
 - `VpCheck\` is a second project in the solution: a console harness over the same `VpArchive.cpp` and `lz4.c` with `list`, `verify` (reads and decompresses every entry), and `extract`. Not shipped by the release workflow.
-- Widgets in the .ui: `mainSplitter` (horizontal) holding `leftSplitter` (vertical: `folderTree` QTreeView, `previewPane` with `playButton`/`stopButton`/`popOutButton` and the `previewArea` QLabel) and `fileList` (QTreeView, multi-select, sortable). Actions: `actionLoadVp`, `actionNewVp`, `actionCloseVp`, `actionExit`, `actionExtractToDir`, `actionExtractToDataDir`, `actionOptions`, `actionAbout`, `actionAboutQt`.
-- `updateActions()` force-disables everything that is not wired up yet; enable each piece as it lands.
-- Window geometry, splitter state, and the last VP folder persist through `QSettings` (org and app name both `QtVP`).
+- Widgets in the .ui: `mainSplitter` (horizontal) holding `leftSplitter` (vertical: `folderTree` QTreeView, `previewPane` with `playButton`/`stopButton`/`popOutButton` and the `previewArea` QLabel) and `filePane` (`filterEdit` QLineEdit above `fileList` QTreeView: multi-select, sortable, drag-only). Actions: `actionLoadVp`, `actionNewVp`, `actionCloseVp`, `actionExit`, `actionExtractToDir`, `actionExtractToDataDir`, `actionFind` (Ctrl+F, focuses the filter), `actionOptions`, `actionAbout`, `actionAboutQt`. The Recent VPs submenu is built in code.
+- `updateActions()` force-disables everything that is not wired up yet (New VP, preview buttons); enable each piece as it lands.
+- `QSettings` (org and app name both `QtVP`): `window/*` for geometry, splitters, and the file list header; `paths/lastVpDir`, `paths/lastExtractDir`, `paths/fsFolder`; `recentFiles` (up to 10, native paths).
 - Icons are Qt standard icons (`QStyle::standardIcon`). No app icon or `.rc` file yet.
 - The release workflow has not run yet. No version tag exists.
-- The scaffold builds and runs in VS 2026 (confirmed by the user 2026-10-08).
-- **Next: user builds phase 2 and runs `VpCheck verify` on real VPs (ideally including a `.vpc` with LZ41 entries), then Phase 3.**
+- **Next: user builds and tries phase 3, then Phase 4 (previews).**
 
 ## Working conventions
 
@@ -62,7 +63,11 @@ The pieces are in `E:\AnimStudio\AnimStudio`. AnimStudio is the user's own GPL p
 - Name: QtVP for now. Possible concern: The Qt Company's trademark guidance may object to "Qt" at the start of a product name. Revisit before a 1.0 release if it matters.
 - Release tags are plain `vX.Y.Z`. The user's mobile-app versioning rule (patch only for pre-releases) does not apply to QtVP.
 - Knossos: AnimStudio's release workflow also opens a PR against KnossosNET/Knet-Tool-Repo. Left out of QtVP's workflow until QtVP is listed there; copy that job from `E:\AnimStudio\.github\workflows\release.yml` when it is.
-- Drag-out to Explorer: extract the dragged entries to a temp folder when the drag starts and hand Explorer file URLs. Simple and fine for the "a few files" case.
+- Drag-out to Explorer: extract the dragged entries to a temp folder when the drag starts and hand Explorer file URLs. Simple and fine for the "a few files" case. Each drag gets its own numbered subfolder of one `QTemporaryDir` (removed on exit); same-named files from different folders go in `~N` subfolders. Drags back onto QtVP itself are ignored.
+- What the extract actions act on: the selected files, or the whole current folder (with subfolders) when nothing is selected or the folder tree has focus (so right-clicking a folder extracts the folder). Selected files land directly in the target folder, except from `<All files>`, where they keep their full VP paths. An extracted folder is recreated under the target. Extract to FS Data Folder always uses full VP paths.
+- The "FS data folder" setting is the game or mod folder, not its `data` folder, because VP paths already start with `data`. The Options dialog offers to use the parent if a folder named `data` is picked.
+- Existing files: one prompt per extraction (Overwrite / Skip Existing / Cancel). Errors are collected and shown together with details; cancel stops between files. Extraction runs on the UI thread with a modal `QProgressDialog`; move it to a worker thread if very large single entries make the UI stall.
+- Filter box: plain text matches anywhere in the name, `*`/`?` wildcards match whole names, `;` separates patterns. Filters the current list only; pick `<All files>` to search the whole VP.
 - The preview pane must stay resizable (VPView32's is). The pop-out window is an addition, not a replacement.
 - Extraction keeps the VP's folder structure relative to the chosen target and restores the entry timestamps.
 - When a VP fails validation, open nothing and say what is wrong (bad magic, directory offset outside the file, entry overruns file). Never crash on bad input.
@@ -102,13 +107,13 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 - Repo, solution, project, GPLv3, README, release workflow.
 - Main window with the VPView32 layout: toolbar, folder tree, file list, resizable preview pane with play/stop/pop-out buttons. Window and splitter layout persist across runs.
 
-### 2. VP core (written, awaiting build)
+### 2. VP core (done)
 - `VpArchive`: parse header and directory, build the folder tree, validate offsets and sizes against the file length, and report damaged archives cleanly instead of crashing.
 - Read an entry's bytes, transparently decompressing LZ41 entries (vendor `lz4.c`/`lz4.h`).
 - Extract an entry, a folder, or everything to a target folder, keeping relative paths and original timestamps.
 - No GUI dependencies, so it can be exercised from a small test harness.
 
-### 3. Browsing and extraction
+### 3. Browsing and extraction (written, awaiting build)
 - Folder tree model with counts and `<All files>`; file list model with Name, Type, Size, Date & Time.
 - Filter box above the file list.
 - Open by File menu, drop a VP on the window, command-line argument, or recent-files list. Accept `.vpc` everywhere `.vp` is accepted.
