@@ -32,12 +32,13 @@ void updateStyle()
 
 Theme::Mode Theme::saved()
 {
-    const QString value = QSettings().value(SettingKey).toString();
+    // Dark until the user picks something else
+    const QString value = QSettings().value(SettingKey, "dark").toString();
     if (value == "light")
         return Mode::Light;
-    if (value == "dark")
-        return Mode::Dark;
-    return Mode::System;
+    if (value == "system")
+        return Mode::System;
+    return Mode::Dark;
 }
 
 void Theme::save(Mode mode)

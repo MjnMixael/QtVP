@@ -14,6 +14,10 @@ public:
     explicit OptionsDialog(QWidget* parent = nullptr);
     ~OptionsDialog() override;
 
+    // Saved settings, with their defaults
+    static bool autoplayMedia();        // off
+    static bool cleanupTempOnExit();    // on
+
     void accept() override;
 
 private:

@@ -221,6 +221,9 @@ void PreviewWidget::setContent(const PreviewContent& content)
     m_info->setVisible(!content.info.isEmpty());
     m_frameLabel->setVisible(isPlayable());
     emit playbackChanged();
+
+    if (m_autoplayMedia && !m_audio.isEmpty())
+        togglePlay();
 }
 
 void PreviewWidget::setLoading(const QString& title)

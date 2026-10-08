@@ -68,6 +68,7 @@ private:
     QList<QUrl> extractForDrag(const std::vector<int>& entries);
     void openSelected(bool chooseApp);
     static QString openFolderRoot();
+    void applySettings();
 
     void addRecentFile(const QString& path);
     void removeRecentFile(const QString& path);
@@ -103,4 +104,8 @@ private:
     // Drag-out extracts here; removed when the app exits
     std::unique_ptr<QTemporaryDir> m_dragDir;
     int m_dragCount = 0;
+
+    // Open extracts under here; created on first use, removed on exit if the option is on
+    QString m_sessionOpenFolder;
+    int m_openCount = 0;
 };

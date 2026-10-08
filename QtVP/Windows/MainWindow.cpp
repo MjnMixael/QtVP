@@ -75,6 +75,7 @@ MainWindow::MainWindow(QWidget* parent)
     setupModels();
     setupConnections();
     restoreLayout();
+    applySettings();
     updateRecentMenu();
     updateActions();
     updatePlaybackButtons();
@@ -99,6 +100,12 @@ void MainWindow::warmUp()
     }
 }
 
+// Settings read at startup and again after the Options dialog
+void MainWindow::applySettings()
+{
+    ui->previewArea->setAutoplayMedia(OptionsDialog::autoplayMedia());
+}
+
 QString MainWindow::openFolderRoot()
 {
     return QDir::temp().filePath("QtVP/Open");
@@ -119,7 +126,13 @@ void MainWindow::openSelected(bool chooseApp)
             return;
     }
 
-    const QString root = QDir(openFolderRoot()).filePath(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz"));
+    // Everything this session opens lives under one folder, so cleanup on exit
+    // never touches files another running QtVP handed out
+    if (m_sessionOpenFolder.isEmpty()) {
+        m_sessionOpenFolder = QDir(openFolderRoot()).filePath(QString("%1-%2")
+            .arg(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss")).arg(QCoreApplication::applicationPid()));
+    }
+    const QString root = QDir(m_sessionOpenFolder).filePath(QString::number(++m_openCount));
     FileOpener opener(this);
     QStringList errors;
 
@@ -232,6 +245,11 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (m_previewWindow)
         m_previewWindow->close();
     saveLayout();
+
+    // Drag-out files go with their QTemporaryDir either way; this covers files opened in other apps
+    if (OptionsDialog::cleanupTempOnExit() && !m_sessionOpenFolder.isEmpty())
+        QDir(m_sessionOpenFolder).removeRecursively();
+
     event->accept();
 }
 
@@ -326,9 +344,14 @@ void MainWindow::setupConnections()
     connect(ui->actionCloseVp, &QAction::triggered, this, &MainWindow::closeVp);
     connect(ui->actionExit, &QAction::triggered, this, &QWidget::close);
     connect(ui->actionExtractToDir, &QAction::triggered, this, &MainWindow::onExtractToDir);
-    connect(ui->actionOptions, &QAction::triggered, this, [this] { OptionsDialog(this).exec(); });
+    connect(ui->actionOptions, &QAction::triggered, this, [this] {
+        if (OptionsDialog(this).exec() == QDialog::Accepted)
+            applySettings();
+    });
     connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::onAbout);
     connect(ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
+    // Not in any menu, so it needs the window to own it for Ctrl+F to work
+    addAction(ui->actionFind);
     connect(ui->actionFind, &QAction::triggered, this, [this] {
         ui->filterEdit->setFocus();
         ui->filterEdit->selectAll();

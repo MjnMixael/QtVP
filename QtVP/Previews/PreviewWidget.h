@@ -80,6 +80,9 @@ public:
     // Creates the sound player now instead of on the first Play
     void prepareAudio();
 
+    // Start sounds (and later movies) as soon as they are shown, instead of waiting for Play
+    void setAutoplayMedia(bool autoplay) { m_autoplayMedia = autoplay; }
+
 signals:
     void playbackChanged();
 
@@ -118,4 +121,5 @@ private:
     QByteArray m_audio;
     QString m_audioName;
     bool m_audioLoaded = false;
+    bool m_autoplayMedia = false;
 };

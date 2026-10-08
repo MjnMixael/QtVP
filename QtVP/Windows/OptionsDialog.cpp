@@ -5,6 +5,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QSettings>
 
 #include "Theme.h"
 #include "Windows/FileOpener.h"
@@ -19,6 +20,8 @@ OptionsDialog::OptionsDialog(QWidget* parent)
     ui->themeCombo->addItem(tr("Light"), int(Theme::Mode::Light));
     ui->themeCombo->addItem(tr("Dark"), int(Theme::Mode::Dark));
     ui->themeCombo->setCurrentIndex(ui->themeCombo->findData(int(Theme::saved())));
+    ui->autoplayCheck->setChecked(autoplayMedia());
+    ui->cleanupCheck->setChecked(cleanupTempOnExit());
 
     ui->animStudioEdit->setText(QDir::toNativeSeparators(FileOpener::toolPath(FileOpener::Tool::AnimStudio)));
     ui->pofToolsEdit->setText(QDir::toNativeSeparators(FileOpener::toolPath(FileOpener::Tool::PofTools)));
@@ -36,6 +39,16 @@ OptionsDialog::OptionsDialog(QWidget* parent)
 OptionsDialog::~OptionsDialog()
 {
     delete ui;
+}
+
+bool OptionsDialog::autoplayMedia()
+{
+    return QSettings().value("preview/autoplayMedia", false).toBool();
+}
+
+bool OptionsDialog::cleanupTempOnExit()
+{
+    return QSettings().value("temp/cleanupOnExit", true).toBool();
 }
 
 void OptionsDialog::accept()
@@ -56,6 +69,10 @@ void OptionsDialog::accept()
     }
     for (const auto& t : tools)
         FileOpener::setToolPath(t.tool, QDir::fromNativeSeparators(t.edit->text().trimmed()));
+
+    QSettings settings;
+    settings.setValue("preview/autoplayMedia", ui->autoplayCheck->isChecked());
+    settings.setValue("temp/cleanupOnExit", ui->cleanupCheck->isChecked());
 
     const auto theme = Theme::Mode(ui->themeCombo->currentData().toInt());
     if (theme != Theme::saved()) {

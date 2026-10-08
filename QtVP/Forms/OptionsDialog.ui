@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>520</width>
-    <height>230</height>
+    <height>290</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -28,6 +28,23 @@
      </item>
      <item row="0" column="1">
       <widget class="QComboBox" name="themeCombo"/>
+     </item>
+     <item row="1" column="0" colspan="2">
+      <widget class="QCheckBox" name="autoplayCheck">
+       <property name="text">
+        <string>Play sounds and movies &amp;automatically in the preview pane</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0" colspan="2">
+      <widget class="QCheckBox" name="cleanupCheck">
+       <property name="text">
+        <string>&amp;Clean up temporary files when QtVP closes</string>
+       </property>
+       <property name="toolTip">
+        <string>Deletes the files this session extracted for dragging and for opening in other apps. Close those apps first if you are still editing a file.</string>
+       </property>
+      </widget>
      </item>
     </layout>
    </item>
