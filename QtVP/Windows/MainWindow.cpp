@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
 
+#include "Core/VpArchive.h"
+
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDir>
@@ -37,10 +39,32 @@ MainWindow::~MainWindow()
 
 void MainWindow::openVp(const QString& path)
 {
-    // VP parsing lands in the next step; for now just track the selection
-    m_currentPath = path;
+    // Parse into a fresh archive so a bad file leaves the current one open
+    auto archive = std::make_unique<VpArchive>();
+    if (!archive->open(path)) {
+        QMessageBox::warning(this, tr("Load VP"), tr("Could not open %1.\n\n%2")
+            .arg(QDir::toNativeSeparators(path), archive->errorString()));
+        return;
+    }
+
+    m_archive = std::move(archive);
     setWindowTitle(tr("QtVP - %1").arg(QFileInfo(path).fileName()));
-    statusBar()->showMessage(tr("Opened %1 (reading not implemented yet)").arg(QDir::toNativeSeparators(path)));
+
+    QString status = tr("Opened %1 (%n file(s))", nullptr, int(m_archive->entries().size()))
+        .arg(QDir::toNativeSeparators(path));
+    const QStringList warnings = m_archive->warnings();
+    if (!warnings.isEmpty())
+        status += tr(". Warning: %1").arg(warnings.join(' '));
+    statusBar()->showMessage(status);
+
+    updateActions();
+}
+
+void MainWindow::closeVp()
+{
+    m_archive.reset();
+    setWindowTitle(tr("QtVP"));
+    statusBar()->showMessage(tr("Ready"));
     updateActions();
 }
 
@@ -68,6 +92,7 @@ void MainWindow::setupIcons()
 void MainWindow::setupConnections()
 {
     connect(ui->actionLoadVp, &QAction::triggered, this, &MainWindow::onLoadVp);
+    connect(ui->actionCloseVp, &QAction::triggered, this, &MainWindow::closeVp);
     connect(ui->actionExit, &QAction::triggered, this, &QWidget::close);
     connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::onAbout);
     connect(ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
@@ -91,11 +116,11 @@ void MainWindow::saveLayout()
 
 void MainWindow::updateActions()
 {
-    const bool hasVp = !m_currentPath.isEmpty();
+    const bool hasVp = m_archive != nullptr;
     ui->actionCloseVp->setEnabled(hasVp);
-    ui->actionExtractToDir->setEnabled(hasVp);
 
     // Not wired up yet
+    ui->actionExtractToDir->setEnabled(false);
     ui->actionNewVp->setEnabled(false);
     ui->actionExtractToDataDir->setEnabled(false);
     ui->actionOptions->setEnabled(false);
@@ -109,7 +134,7 @@ void MainWindow::onLoadVp()
     QSettings settings;
     const QString startDir = settings.value("paths/lastVpDir").toString();
     const QString path = QFileDialog::getOpenFileName(this, tr("Load VP"), startDir,
-        tr("VP archives (*.vp);;All files (*)"));
+        tr("VP archives (*.vp *.vpc);;All files (*)"));
     if (path.isEmpty())
         return;
 

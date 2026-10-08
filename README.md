@@ -25,6 +25,18 @@ Requirements:
 
 Open `QtVP.slnx` and build `Release|x64`.
 
+The solution also builds `VpCheck`, a small console tool for testing the VP core without the GUI:
+
+```
+VpCheck list <file.vp>
+VpCheck verify <file.vp> [more.vp ...]
+VpCheck extract <file.vp> <target folder>
+```
+
+## Third-party code
+
+- [LZ4](https://github.com/lz4/lz4) 1.10.0 (`lz4.c`, `lz4.h`), BSD 2-Clause. See `QtVP/Dependencies/lz4/LICENSE`.
+
 ## License
 
 GNU GPL v3. See [LICENSE](LICENSE).

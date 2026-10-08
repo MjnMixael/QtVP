@@ -2,6 +2,9 @@
 
 #include <QMainWindow>
 
+#include <memory>
+
+class VpArchive;
 namespace Ui { class MainWindow; }
 
 class MainWindow : public QMainWindow
@@ -13,6 +16,7 @@ public:
     ~MainWindow() override;
 
     void openVp(const QString& path);
+    void closeVp();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -28,5 +32,5 @@ private:
     void onAbout();
 
     Ui::MainWindow* ui;
-    QString m_currentPath;
+    std::unique_ptr<VpArchive> m_archive;
 };

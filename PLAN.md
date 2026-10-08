@@ -24,15 +24,17 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 ## Current state
 
 - Phase 1 is done and pushed (`658fb96` scaffold, `1299112` VS 2026 retarget).
-- Files: `main.cpp` (opens a `.vp` passed on the command line), `Windows\MainWindow.{h,cpp}`, `Forms\MainWindow.ui`.
-- `MainWindow::openVp()` only records the path and sets the title. Nothing parses VPs yet.
+- Phase 2 code is written but not yet built or confirmed by the user.
+- Files: `main.cpp` (opens a `.vp` passed on the command line), `Windows\MainWindow.{h,cpp}`, `Forms\MainWindow.ui`, `Core\VpArchive.{h,cpp}`, `Dependencies\lz4\` (upstream LZ4 1.10.0, `lz4.c`/`lz4.h`/`LICENSE` only).
+- `MainWindow` owns a `std::unique_ptr<VpArchive>`. `openVp()` parses into a fresh archive and only replaces the current one on success; failures show a message box with `errorString()`, and `warnings()` go to the status bar. Close VP is wired. Nothing is shown in the tree or list yet (phase 3).
+- `VpCheck\` is a second project in the solution: a console harness over the same `VpArchive.cpp` and `lz4.c` with `list`, `verify` (reads and decompresses every entry), and `extract`. Not shipped by the release workflow.
 - Widgets in the .ui: `mainSplitter` (horizontal) holding `leftSplitter` (vertical: `folderTree` QTreeView, `previewPane` with `playButton`/`stopButton`/`popOutButton` and the `previewArea` QLabel) and `fileList` (QTreeView, multi-select, sortable). Actions: `actionLoadVp`, `actionNewVp`, `actionCloseVp`, `actionExit`, `actionExtractToDir`, `actionExtractToDataDir`, `actionOptions`, `actionAbout`, `actionAboutQt`.
 - `updateActions()` force-disables everything that is not wired up yet; enable each piece as it lands.
 - Window geometry, splitter state, and the last VP folder persist through `QSettings` (org and app name both `QtVP`).
 - Icons are Qt standard icons (`QStyle::standardIcon`). No app icon or `.rc` file yet.
 - The release workflow has not run yet. No version tag exists.
 - The scaffold builds and runs in VS 2026 (confirmed by the user 2026-10-08).
-- **Next: Phase 2 (VP core).**
+- **Next: user builds phase 2 and runs `VpCheck verify` on real VPs (ideally including a `.vpc` with LZ41 entries), then Phase 3.**
 
 ## Working conventions
 
@@ -47,7 +49,7 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 
 ## Notes on reusing AnimStudio code
 
-The pieces are in `E:\AnimStudio\AnimStudio`. They all work on files on disk; QtVP needs them to work on bytes read out of a VP.
+The pieces are in `E:\AnimStudio\AnimStudio`. AnimStudio is the user's own GPL project, so its code can be copied directly. They all work on files on disk; QtVP needs them to work on bytes read out of a VP.
 
 - `Formats\Custom Handlers\PcxHandler` and `TgaHandler` take a `QIODevice*`. Feed them a `QBuffer` over the entry's bytes; little or no change needed.
 - `Formats\Custom Handlers\DdsHandler` takes a file path and uses compressonator for both read and write. QtVP only reads, so replace it with a decoder over bytes using `bcdec` (single header, MIT). Do not bring compressonator over.
@@ -58,11 +60,16 @@ The pieces are in `E:\AnimStudio\AnimStudio`. They all work on files on disk; Qt
 ## Decisions and open items
 
 - Name: QtVP for now. Possible concern: The Qt Company's trademark guidance may object to "Qt" at the start of a product name. Revisit before a 1.0 release if it matters.
+- Release tags are plain `vX.Y.Z`. The user's mobile-app versioning rule (patch only for pre-releases) does not apply to QtVP.
 - Knossos: AnimStudio's release workflow also opens a PR against KnossosNET/Knet-Tool-Repo. Left out of QtVP's workflow until QtVP is listed there; copy that job from `E:\AnimStudio\.github\workflows\release.yml` when it is.
 - Drag-out to Explorer: extract the dragged entries to a temp folder when the drag starts and hand Explorer file URLs. Simple and fine for the "a few files" case.
 - The preview pane must stay resizable (VPView32's is). The pop-out window is an addition, not a replacement.
 - Extraction keeps the VP's folder structure relative to the chosen target and restores the entry timestamps.
-- When a VP fails validation, open nothing and say what is wrong (bad magic, directory past end of file, entry overruns file). Never crash on bad input.
+- When a VP fails validation, open nothing and say what is wrong (bad magic, directory offset outside the file, entry overruns file). Never crash on bad input.
+- Be as tolerant as the engine, though. Several old campaign VPs (Storm Front, What If, Rain on Ribos 4, Light of Antares) have a header entry count one higher than the directory holds. The engine stops at end of file and keeps what it read, so `VpArchive` does the same and adds a warning instead of failing.
+- A scan of 214 local VPs (63k entries) with the same rules found no other problems. Some VPs open the same folder twice; folders are merged case-insensitively, as the engine does. Unclosed folders at the end of the directory are fine.
+- None of the local VPs have LZ41 entries, so the LZ41 reader is written from the engine source but untested on real data. Find a `.vpc` to test with.
+- Extraction refuses entry or folder names that are empty, `.`/`..`, or contain `<>:"/\|?*` or control characters, so a hostile VP cannot write outside the target folder. Files are written with `QSaveFile` and timestamps are set afterward (skipped when the timestamp is 0).
 - Large VPs (retail `sparky_fs2.vp` has thousands of entries; mod VPs can be several GB): read the directory only on open, read entry bytes on demand, never load the whole file.
 
 ## VP format reference
@@ -71,9 +78,11 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 
 - Header (16 bytes): `"VPVP"`, int version (2), int directory offset, int entry count.
 - Directory entries (44 bytes each): int offset, int size, char[32] name, int timestamp (Unix time).
-- A directory entry with size 0 opens a folder; an entry named `..` closes the current one. Files belong to the folder that is open when they appear.
+- A directory entry with size 0 opens a folder; an entry named `..` closes the current one. Files belong to the folder that is open when they appear. This means a VP cannot hold a zero-byte file (the engine would read it as a folder); phase 5 must refuse or warn on empty files.
+- The engine loads both `*.vp` and `*.vpc`. A `.vpc` is an ordinary VP whose entries are LZ41-compressed. Offsets, sizes, and timestamps are read as unsigned 32-bit, so archives up to 4 GB work.
 - Names are limited to 31 characters plus the terminator. The engine matches names case-insensitively.
 - LZ41 compression is per file, not per archive: a compressed entry starts with the `LZ41` magic, followed by LZ4 blocks and a block offset table. The last 12 bytes are three ints: offset count, decompressed size, block size (see `lz41_create_ci` / `lz41_load_offsets`). Uncompressed and compressed entries can be mixed in one VP.
+- LZ41 offsets are relative to the start of the entry, and there is one more offset than there are blocks (the last marks the end of the final block). Each block decodes independently with `LZ4_decompress_safe`, which is what lets the engine seek within a file.
 
 ## Engine format support (preview targets)
 
@@ -93,7 +102,7 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 - Repo, solution, project, GPLv3, README, release workflow.
 - Main window with the VPView32 layout: toolbar, folder tree, file list, resizable preview pane with play/stop/pop-out buttons. Window and splitter layout persist across runs.
 
-### 2. VP core
+### 2. VP core (written, awaiting build)
 - `VpArchive`: parse header and directory, build the folder tree, validate offsets and sizes against the file length, and report damaged archives cleanly instead of crashing.
 - Read an entry's bytes, transparently decompressing LZ41 entries (vendor `lz4.c`/`lz4.h`).
 - Extract an entry, a folder, or everything to a target folder, keeping relative paths and original timestamps.
@@ -102,7 +111,7 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 ### 3. Browsing and extraction
 - Folder tree model with counts and `<All files>`; file list model with Name, Type, Size, Date & Time.
 - Filter box above the file list.
-- Open by File menu, drop a VP on the window, command-line argument, or recent-files list.
+- Open by File menu, drop a VP on the window, command-line argument, or recent-files list. Accept `.vpc` everywhere `.vp` is accepted.
 - Extract selected (or the selected folder) to a chosen folder.
 - Drag files out of the list straight into Explorer (extract to a temp folder on drag start).
 - Options dialog: FS data folder, then enable "Extract to FS Data Folder".

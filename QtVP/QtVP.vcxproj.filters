@@ -5,8 +5,17 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>qml;cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
+    <Filter Include="Source Files\Core">
+      <UniqueIdentifier>{8D3B6E52-1C4A-4F27-9E05-7A6C2B9D3E14}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\Windows">
       <UniqueIdentifier>{5A0C7E21-6F3B-4D7E-9C1A-3B8E2D4F6A01}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Dependencies">
+      <UniqueIdentifier>{C1E47A90-3B5D-4E68-A2F1-6D9B8C0E7F35}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Dependencies\lz4">
+      <UniqueIdentifier>{2F6A9D13-7E84-4B0C-B5D2-9A1E3C7F4B68}</UniqueIdentifier>
     </Filter>
     <Filter Include="Form Files">
       <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
@@ -17,9 +26,23 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\VpArchive.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
     <ClCompile Include="Windows\MainWindow.cpp">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
+    <ClCompile Include="Dependencies\lz4\lz4.c">
+      <Filter>Dependencies\lz4</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Core\VpArchive.h">
+      <Filter>Source Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Dependencies\lz4\lz4.h">
+      <Filter>Dependencies\lz4</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Windows\MainWindow.h">

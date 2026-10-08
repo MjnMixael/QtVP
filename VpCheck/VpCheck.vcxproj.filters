@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{D90C68C6-915C-4042-A18F-D84A84EE1C7F}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;h;hpp</Extensions>
+    </Filter>
+    <Filter Include="QtVP Core">
+      <UniqueIdentifier>{6B1E4D27-93A8-4C5F-8E02-3F7A9B6C1D45}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\QtVP\Core\VpArchive.cpp">
+      <Filter>QtVP Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\QtVP\Dependencies\lz4\lz4.c">
+      <Filter>QtVP Core</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\QtVP\Core\VpArchive.h">
+      <Filter>QtVP Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\QtVP\Dependencies\lz4\lz4.h">
+      <Filter>QtVP Core</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

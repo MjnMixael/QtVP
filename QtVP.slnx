@@ -3,4 +3,5 @@
     <Platform Name="x64" />
   </Configurations>
   <Project Path="QtVP/QtVP.vcxproj" Id="f2575424-7330-4325-8733-1b27c95049d8" />
+  <Project Path="VpCheck/VpCheck.vcxproj" Id="4a2c8f88-6175-4353-9bdc-9de6728dd565" />
 </Solution>
