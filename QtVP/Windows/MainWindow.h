@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QFutureWatcher>
 #include <QList>
 #include <QMainWindow>
@@ -71,6 +72,7 @@ private:
     void extractTo(const QString& target, std::vector<int> entries, int baseFolder);
     QList<QUrl> extractForDrag(const std::vector<int>& entries);
     void openSelected(bool chooseApp);
+    void checkEditedFiles();
     static QString openFolderRoot();
     void applySettings();
 
@@ -79,6 +81,8 @@ private:
     void updateRecentMenu();
 
     void onLoadVp();
+    void onExtractToDir();
+    void onAbout();
 
     // Documents and saving
     void loadVp(const QString& path);
@@ -100,8 +104,6 @@ private:
     void collectExpanded(const QModelIndex& parent, std::vector<int>& folders) const;
     void selectFiles(const std::vector<int>& files, int current);
     bool handleViewDrag(bool onTree, QDropEvent* event, bool drop);
-    void onExtractToDir();
-    void onAbout();
 
     Ui::MainWindow* ui;
     std::unique_ptr<VpDocument> m_document;
@@ -134,4 +136,16 @@ private:
     // Open extracts under here; created on first use, removed on exit if the option is on
     QString m_sessionOpenFolder;
     int m_openCount = 0;
+
+    // Files handed to other apps, watched so edits made there can be packed back in
+    struct OpenedFile
+    {
+        int file;
+        QString vpPath;     // to find the file again after saving reloads the VP
+        QString diskPath;
+        QDateTime modified;
+        qint64 size;
+    };
+    std::vector<OpenedFile> m_openedFiles;
+    bool m_checkingEdits = false;
 };

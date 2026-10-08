@@ -178,7 +178,13 @@ void MainWindow::openSelected(bool chooseApp)
                 errors << result.errors;
                 if (file == entry)
                     extracted = false;
+                continue;
             }
+
+            // Watched from now on, so edits made in the other app can be packed back in
+            const QString diskPath = QDir(dir).filePath(m_document->files()[file].name);
+            const QFileInfo info(diskPath);
+            m_openedFiles.push_back({ file, m_document->filePath(file), diskPath, info.lastModified(), info.size() });
         }
         QApplication::restoreOverrideCursor();
 
@@ -196,6 +202,46 @@ void MainWindow::openSelected(bool chooseApp)
             QMessageBox::Ok, this);
         box.setDetailedText(errors.join('\n'));
         box.exec();
+    }
+}
+
+// Runs whenever QtVP becomes the active app again. Each change is asked about once;
+// editing the same file again asks again.
+void MainWindow::checkEditedFiles()
+{
+    if (!m_document || m_openedFiles.empty() || m_checkingEdits || QApplication::activeModalWidget())
+        return;
+
+    std::map<int, QString> edited;
+    QStringList names;
+    for (OpenedFile& opened : m_openedFiles) {
+        const QFileInfo info(opened.diskPath);
+        if (!info.exists() || (info.lastModified() == opened.modified && info.size() == opened.size))
+            continue;
+        opened.modified = info.lastModified();
+        opened.size = info.size();
+
+        // Deleted from the VP since, or emptied, which a VP cannot hold
+        const VpDocFile& f = m_document->files()[opened.file];
+        if (f.removed || !m_document->isFolderLive(f.folder) || info.size() == 0)
+            continue;
+        if (edited.emplace(opened.file, opened.diskPath).second)
+            names << QDir::toNativeSeparators(m_document->filePath(opened.file));
+    }
+    if (edited.empty())
+        return;
+
+    m_checkingEdits = true;
+    QMessageBox box(QMessageBox::Question, tr("Edited Files"),
+        tr("One or more files were edited. Pack the edits back into this VP?"),
+        QMessageBox::Yes | QMessageBox::No, this);
+    box.setDetailedText(names.join('\n'));
+    const bool pack = box.exec() == QMessageBox::Yes;
+    m_checkingEdits = false;
+
+    if (pack) {
+        m_editor->replaceContents(edited);
+        statusBar()->showMessage(tr("Packed %n edited file(s). Save to keep them.", nullptr, int(edited.size())));
     }
 }
 
@@ -272,6 +318,9 @@ void MainWindow::setDocument(std::unique_ptr<VpDocument> document)
     m_fileModel->setDocument(nullptr);
     m_document = std::move(document);
     m_currentFolder = FolderTreeModel::NoFolder;
+
+    // Edits to files opened from another VP cannot be packed into this one
+    m_openedFiles.clear();
 
     {
         const QSignalBlocker blocker(m_editor);
@@ -419,7 +468,19 @@ bool MainWindow::saveTo(const QString& path)
         return false;
     }
 
+    std::vector<OpenedFile> opened = std::move(m_openedFiles);
     loadVp(path);
+
+    // Files still open in other apps now belong to the reloaded VP
+    if (m_document) {
+        for (OpenedFile& o : opened) {
+            const qsizetype slash = o.vpPath.lastIndexOf('/');
+            const int folder = folderByPath(*m_document, slash < 0 ? QString() : o.vpPath.left(slash));
+            o.file = folder < 0 ? -1 : m_document->findFile(folder, o.vpPath.mid(slash + 1));
+            if (o.file >= 0)
+                m_openedFiles.push_back(o);
+        }
+    }
 
     // Back to the folder the user was in
     if (m_document && !folderPath.isEmpty()) {
@@ -556,6 +617,12 @@ void MainWindow::setupConnections()
     connect(ui->actionRename, &QAction::triggered, this, &MainWindow::onRename);
     connect(ui->actionDelete, &QAction::triggered, this, &MainWindow::onDelete);
     connect(m_editor, &DocumentEditor::documentChanged, this, &MainWindow::refreshAfterEdit);
+
+    // Coming back from another app is when edits made there get offered for packing
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+        if (state == Qt::ApplicationActive)
+            QTimer::singleShot(0, this, &MainWindow::checkEditedFiles);
+    });
     connect(m_editor->undoStack(), &QUndoStack::cleanChanged, this, &MainWindow::updateTitle);
     connect(ui->actionExit, &QAction::triggered, this, &QWidget::close);
     connect(ui->actionExtractToDir, &QAction::triggered, this, &MainWindow::onExtractToDir);
