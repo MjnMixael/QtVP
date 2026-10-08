@@ -9,6 +9,62 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 - No feature creep. Things other community VP tools bolt on (mod managers, model editors, etc.) are out of scope.
 - Setup follows AnimStudio and Etemenanki: Qt VS Tools project, Visual Studio 2026 (.slnx, v145 toolset), Qt 6.8.3 msvc2022_64 (ABI-compatible with v145), C++17, GPLv3, tag-triggered release workflow.
 
+## Where things are
+
+| What | Where |
+|---|---|
+| This repo | `E:\QtVP`, branch `main`, public at https://github.com/MjnMixael/QtVP |
+| Solution / project | `QtVP.slnx`, `QtVP\QtVP.vcxproj` (+ `.filters`; keep both in sync when adding files) |
+| Qt | `C:\Qt6\6.8.3\msvc2022_64`, registered in Qt VS Tools as `6.8.3_msvc2022_64`. Qt Multimedia and its `ffmpegmediaplugin` are installed there. |
+| AnimStudio (code to copy) | `E:\AnimStudio\AnimStudio` (GitHub MjnMixael/AnimStudio) |
+| Etemenanki (sibling app, same setup) | `E:\Etemenanki` |
+| FSO engine source (format reference only, never a dependency, never copy code from it: the Volition source license is not GPL-compatible) | `E:\FSO-Code\code` |
+| VPView32 (the app being replaced) | Windows-only, closed. Layout described under Ground rules. |
+
+## Current state
+
+- Phase 1 is done and pushed (`658fb96` scaffold, `1299112` VS 2026 retarget).
+- Files: `main.cpp` (opens a `.vp` passed on the command line), `Windows\MainWindow.{h,cpp}`, `Forms\MainWindow.ui`.
+- `MainWindow::openVp()` only records the path and sets the title. Nothing parses VPs yet.
+- Widgets in the .ui: `mainSplitter` (horizontal) holding `leftSplitter` (vertical: `folderTree` QTreeView, `previewPane` with `playButton`/`stopButton`/`popOutButton` and the `previewArea` QLabel) and `fileList` (QTreeView, multi-select, sortable). Actions: `actionLoadVp`, `actionNewVp`, `actionCloseVp`, `actionExit`, `actionExtractToDir`, `actionExtractToDataDir`, `actionOptions`, `actionAbout`, `actionAboutQt`.
+- `updateActions()` force-disables everything that is not wired up yet; enable each piece as it lands.
+- Window geometry, splitter state, and the last VP folder persist through `QSettings` (org and app name both `QtVP`).
+- Icons are Qt standard icons (`QStyle::standardIcon`). No app icon or `.rc` file yet.
+- The release workflow has not run yet. No version tag exists.
+- The scaffold builds and runs in VS 2026 (confirmed by the user 2026-10-08).
+- **Next: Phase 2 (VP core).**
+
+## Working conventions
+
+- **The user builds.** Do not run msbuild or other builds to verify; check changes statically and ask the user to build.
+- Commit and push only when asked. Commit messages: short imperative subject, wrapped body explaining why. No attribution lines.
+- Never write em or en dashes anywhere (code, comments, commits, docs, chat). Use a plain hyphen.
+- American spelling (color, center, behavior, gray, organize).
+- Comments are terse and match the surrounding code. No doxygen `/** @brief */` blocks.
+- Qt keywords (`signals:`, `emit`) are fine here, as in AnimStudio. (QtFRED's no-keywords rule does not apply to this project.)
+- 4-space indentation, `m_` member prefix, `ui->` pointer to the generated form, connections made in code with function-pointer syntax.
+- When a phase or decision changes, update this file in the same commit.
+
+## Notes on reusing AnimStudio code
+
+The pieces are in `E:\AnimStudio\AnimStudio`. They all work on files on disk; QtVP needs them to work on bytes read out of a VP.
+
+- `Formats\Custom Handlers\PcxHandler` and `TgaHandler` take a `QIODevice*`. Feed them a `QBuffer` over the entry's bytes; little or no change needed.
+- `Formats\Custom Handlers\DdsHandler` takes a file path and uses compressonator for both read and write. QtVP only reads, so replace it with a decoder over bytes using `bcdec` (single header, MIT). Do not bring compressonator over.
+- `Formats\Import\AniImporter`, `EffImporter`, `ApngImporter` expose `importFromFile(const QString& path)` returning `std::optional<AnimationData>`. Add a bytes-based entry point. `EffImporter` must resolve its frame files through a callback that looks them up in the same VP folder, not the file system.
+- `ApngImporter` depends on `Dependencies\apngdisassembler` and `Dependencies\libpng`; `AniImporter` uses `Animation\Palette`. Copy only what the importers and playback need: no exporters, quantizer, libimagequant, apngasm, or compressonator.
+- `Animation\AnimationData.h` (frames, fps, loop point, keyframes) and the play/pause timer logic in `Animation\AnimationController` are the model for preview playback. Strip the editing and export parts.
+
+## Decisions and open items
+
+- Name: QtVP for now. Possible concern: The Qt Company's trademark guidance may object to "Qt" at the start of a product name. Revisit before a 1.0 release if it matters.
+- Knossos: AnimStudio's release workflow also opens a PR against KnossosNET/Knet-Tool-Repo. Left out of QtVP's workflow until QtVP is listed there; copy that job from `E:\AnimStudio\.github\workflows\release.yml` when it is.
+- Drag-out to Explorer: extract the dragged entries to a temp folder when the drag starts and hand Explorer file URLs. Simple and fine for the "a few files" case.
+- The preview pane must stay resizable (VPView32's is). The pop-out window is an addition, not a replacement.
+- Extraction keeps the VP's folder structure relative to the chosen target and restores the entry timestamps.
+- When a VP fails validation, open nothing and say what is wrong (bad magic, directory past end of file, entry overruns file). Never crash on bad input.
+- Large VPs (retail `sparky_fs2.vp` has thousands of entries; mod VPs can be several GB): read the directory only on open, read entry bytes on demand, never load the whole file.
+
 ## VP format reference
 
 From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, `code/cfilearchiver`, `code/cfileextractor`):
