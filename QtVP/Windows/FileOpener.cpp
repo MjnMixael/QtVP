@@ -27,6 +27,12 @@ const char* settingKey(FileOpener::Tool tool)
     return tool == FileOpener::Tool::AnimStudio ? "tools/animStudio" : "tools/pofTools";
 }
 
+// An app picked with Choose Application for one extension, where the system has no chooser
+QString rememberedAppKey(const QString& path)
+{
+    return QStringLiteral("openWith/") + QFileInfo(path).suffix().toLower();
+}
+
 } // namespace
 
 FileOpener::Tool FileOpener::toolFor(const QString& fileName)
@@ -55,6 +61,17 @@ void FileOpener::setToolPath(Tool tool, const QString& path)
         QSettings().setValue(settingKey(tool), path);
 }
 
+QString FileOpener::programFilter()
+{
+#if defined(Q_OS_WIN)
+    return tr("Programs (*.exe);;All files (*)");
+#elif defined(Q_OS_MACOS)
+    return tr("Applications (*.app);;All files (*)");
+#else
+    return tr("All files (*)");
+#endif
+}
+
 FileOpener::FileOpener(QWidget* parent)
     : m_parent(parent)
 {
@@ -70,19 +87,19 @@ void FileOpener::open(const QString& path)
 
     Choice& choice = m_choices[tool];
     if (choice == Choice::Unasked)
-        choice = QFileInfo(toolPath(tool)).isFile() ? Choice::Tool : askAboutTool(tool, QFileInfo(path).fileName());
+        choice = QFileInfo::exists(toolPath(tool)) ? Choice::Tool : askAboutTool(tool, QFileInfo(path).fileName());
 
-    if (choice == Choice::Tool && !launchTool(tool, path))
+    if (choice == Choice::Tool && !launch(toolPath(tool), path))
         choice = Choice::Skip;
     else if (choice == Choice::System)
         openWithSystem(path);
 }
 
-// Windows' own "How do you want to open this file?" dialog, which can also make the
-// choice permanent for the extension
 void FileOpener::openWith(const QString& path)
 {
 #ifdef Q_OS_WIN
+    // Windows' own "How do you want to open this file?" dialog, which can also make
+    // the choice permanent for the extension
     const std::wstring file = QDir::toNativeSeparators(path).toStdWString();
     OPENASINFO info = {};
     info.pcszFile = file.c_str();
@@ -90,8 +107,7 @@ void FileOpener::openWith(const QString& path)
     const HWND owner = m_parent ? reinterpret_cast<HWND>(m_parent->window()->winId()) : nullptr;
     SHOpenWithDialog(owner, &info);
 #else
-    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path)))
-        QMessageBox::warning(m_parent, tr("Open"), tr("No program is set up to open %1.").arg(QFileInfo(path).fileName()));
+    chooseApplication(path);
 #endif
 }
 
@@ -106,9 +122,9 @@ FileOpener::Choice FileOpener::askAboutTool(Tool tool, const QString& fileName)
             ? tr("%1 files open in %2, but where %2 is installed has not been set.").arg(ext, name)
             : tr("%1 files open in %2, but it is no longer at %3.").arg(ext, name, QDir::toNativeSeparators(saved)),
         QMessageBox::NoButton, m_parent);
-    box.setInformativeText(tr("Locate %1 now, or open the file with the app Windows uses for it?").arg(name));
+    box.setInformativeText(tr("Locate %1 now, or open the file in your system's default app for it?").arg(name));
     QPushButton* locate = box.addButton(tr("&Locate %1...").arg(name), QMessageBox::AcceptRole);
-    QPushButton* system = box.addButton(tr("Open with &Windows"), QMessageBox::ActionRole);
+    QPushButton* system = box.addButton(tr("Use the &Default App"), QMessageBox::ActionRole);
     box.addButton(QMessageBox::Cancel);
     box.setDefaultButton(locate);
     box.exec();
@@ -118,29 +134,62 @@ FileOpener::Choice FileOpener::askAboutTool(Tool tool, const QString& fileName)
     if (box.clickedButton() != locate)
         return Choice::Skip;
 
-    const QString exe = QFileDialog::getOpenFileName(m_parent, tr("Locate %1").arg(name),
-        QFileInfo(saved).absolutePath(), tr("Programs (*.exe);;All files (*)"));
-    if (exe.isEmpty())
+    const QString program = QFileDialog::getOpenFileName(m_parent, tr("Locate %1").arg(name),
+        QFileInfo(saved).absolutePath(), programFilter());
+    if (program.isEmpty())
         return Choice::Skip;
-    setToolPath(tool, exe);
+    setToolPath(tool, program);
     return Choice::Tool;
 }
 
-bool FileOpener::launchTool(Tool tool, const QString& path)
+bool FileOpener::launch(const QString& program, const QString& path)
 {
-    const QString exe = toolPath(tool);
-    const QString native = QDir::toNativeSeparators(path);
-    if (QProcess::startDetached(exe, { native }, QFileInfo(exe).absolutePath()))
-        return true;
+    const QString file = QDir::toNativeSeparators(path);
+    bool started = false;
+#ifdef Q_OS_MACOS
+    // An app bundle is a folder; open starts it with the file
+    if (program.endsWith(".app", Qt::CaseInsensitive))
+        started = QProcess::startDetached("open", { "-a", program, file });
+    else
+#endif
+        started = QProcess::startDetached(program, { file }, QFileInfo(program).absolutePath());
 
-    QMessageBox::warning(m_parent, tr("Open"), tr("Could not start %1 (%2).")
-        .arg(toolName(tool), QDir::toNativeSeparators(exe)));
-    return false;
+    if (!started) {
+        QMessageBox::warning(m_parent, tr("Open"), tr("Could not start %1.")
+            .arg(QDir::toNativeSeparators(program)));
+    }
+    return started;
 }
 
-// Falls back to the Open With dialog when nothing is associated with the extension
+// Falls back to choosing an app when nothing is associated with the extension
 void FileOpener::openWithSystem(const QString& path)
 {
+#ifndef Q_OS_WIN
+    const QString remembered = QSettings().value(rememberedAppKey(path)).toString();
+    if (!remembered.isEmpty() && QFileInfo::exists(remembered)) {
+        launch(remembered, path);
+        return;
+    }
+#endif
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path)))
         openWith(path);
+}
+
+// Where the system has no Open With dialog: pick a program, optionally for good
+void FileOpener::chooseApplication(const QString& path)
+{
+    const QString name = QFileInfo(path).fileName();
+    const QString program = QFileDialog::getOpenFileName(m_parent, tr("Choose an Application to Open %1").arg(name),
+        QString(), programFilter());
+    if (program.isEmpty())
+        return;
+
+    const QString ext = QFileInfo(path).suffix().toLower();
+    if (!ext.isEmpty()) {
+        const auto answer = QMessageBox::question(m_parent, tr("Open"),
+            tr("Always open .%1 files with %2?").arg(ext, QFileInfo(program).completeBaseName()));
+        if (answer == QMessageBox::Yes)
+            QSettings().setValue(rememberedAppKey(path), program);
+    }
+    launch(program, path);
 }

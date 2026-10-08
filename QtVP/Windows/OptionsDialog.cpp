@@ -60,7 +60,7 @@ void OptionsDialog::accept()
     };
     for (const auto& t : tools) {
         const QString path = t.edit->text().trimmed();
-        if (!path.isEmpty() && !QFileInfo(path).isFile()) {
+        if (!path.isEmpty() && !QFileInfo::exists(path)) {
             QMessageBox::warning(this, windowTitle(), tr("%1 was not found at %2.")
                 .arg(FileOpener::toolName(t.tool), QDir::toNativeSeparators(path)));
             t.edit->setFocus();
@@ -86,7 +86,7 @@ void OptionsDialog::browseForTool(QLineEdit* edit, const QString& name)
 {
     const QString current = QDir::fromNativeSeparators(edit->text().trimmed());
     const QString path = QFileDialog::getOpenFileName(this, tr("Locate %1").arg(name),
-        current.isEmpty() ? QString() : QFileInfo(current).absolutePath(), tr("Programs (*.exe);;All files (*)"));
+        current.isEmpty() ? QString() : QFileInfo(current).absolutePath(), FileOpener::programFilter());
     if (!path.isEmpty())
         edit->setText(QDir::toNativeSeparators(path));
 }

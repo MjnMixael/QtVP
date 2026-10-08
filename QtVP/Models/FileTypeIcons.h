@@ -3,10 +3,12 @@
 #include <QIcon>
 #include <QString>
 
-// The icon Windows shows for a file name's type (from its associated app), without
-// the file having to exist. Cached per extension. Call from the UI thread.
+#include "Icons.h"
+
+// Which kind of FreeSpace file a name is, by extension, and its icon. Cached per kind.
 namespace FileTypeIcons {
 
+Icons::FileKind kindOf(const QString& fileName);
 QIcon forFileName(const QString& fileName);
 
 } // namespace FileTypeIcons

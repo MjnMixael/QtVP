@@ -1,64 +1,38 @@
 #include "FileTypeIcons.h"
 
-#include <QApplication>
 #include <QFileInfo>
 #include <QHash>
-#include <QImage>
-#include <QPixmap>
-#include <QStyle>
 
-#ifdef Q_OS_WIN
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <shellapi.h>
-#pragma comment(lib, "shell32.lib")
-#endif
-
-namespace {
-
-#ifdef Q_OS_WIN
-// SHGFI_USEFILEATTRIBUTES makes the shell answer from the name alone, so a made-up
-// "file.ext" gets the same icon a real one would
-QPixmap shellIcon(const QString& extension, UINT sizeFlag)
+Icons::FileKind FileTypeIcons::kindOf(const QString& fileName)
 {
-    const std::wstring name = (QStringLiteral("file.") + extension).toStdWString();
-    SHFILEINFOW info = {};
-    if (!SHGetFileInfoW(name.c_str(), FILE_ATTRIBUTE_NORMAL, &info, sizeof(info),
-            SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | sizeFlag) || !info.hIcon)
-        return QPixmap();
-
-    const QPixmap pixmap = QPixmap::fromImage(QImage::fromHICON(info.hIcon));
-    DestroyIcon(info.hIcon);
-    return pixmap;
+    using Kind = Icons::FileKind;
+    static const QHash<QString, Kind> kinds{
+        { "pcx", Kind::Image }, { "tga", Kind::Image }, { "dds", Kind::Image }, { "png", Kind::Image },
+        { "jpg", Kind::Image }, { "jpeg", Kind::Image }, { "bmp", Kind::Image }, { "ktx", Kind::Image },
+        { "ani", Kind::Animation }, { "eff", Kind::Animation },
+        { "wav", Kind::Sound }, { "ogg", Kind::Sound }, { "mp3", Kind::Sound }, { "flac", Kind::Sound },
+        { "opus", Kind::Sound },
+        { "mve", Kind::Movie }, { "mp4", Kind::Movie }, { "webm", Kind::Movie }, { "mkv", Kind::Movie },
+        { "avi", Kind::Movie }, { "ogv", Kind::Movie },
+        { "tbl", Kind::Text }, { "tbm", Kind::Text }, { "txt", Kind::Text }, { "cfg", Kind::Text },
+        { "ini", Kind::Text }, { "xml", Kind::Text }, { "json", Kind::Text }, { "csv", Kind::Text },
+        { "html", Kind::Text }, { "rml", Kind::Text }, { "rcss", Kind::Text },
+        { "fs2", Kind::Mission }, { "fc2", Kind::Mission },
+        { "pof", Kind::Model }, { "dae", Kind::Model },
+        { "lua", Kind::Script }, { "sdr", Kind::Script }, { "vert", Kind::Script }, { "frag", Kind::Script },
+        { "geom", Kind::Script }, { "glsl", Kind::Script },
+        { "vf", Kind::Font }, { "ttf", Kind::Font }, { "otf", Kind::Font }, { "fnt", Kind::Font },
+    };
+    return kinds.value(QFileInfo(fileName).suffix().toLower(), Kind::Other);
 }
-#endif
-
-} // namespace
 
 QIcon FileTypeIcons::forFileName(const QString& fileName)
 {
-    static QHash<QString, QIcon> cache;
+    static QHash<int, QIcon> cache;
 
-    const QString extension = QFileInfo(fileName).suffix().toLower();
-    const auto found = cache.constFind(extension);
-    if (found != cache.constEnd())
-        return found.value();
-
-    QIcon icon;
-#ifdef Q_OS_WIN
-    // Both sizes, so the icon stays sharp on scaled displays (not "small": windows.h defines it as char)
-    const QPixmap smallIcon = shellIcon(extension, SHGFI_SMALLICON);
-    const QPixmap largeIcon = shellIcon(extension, SHGFI_LARGEICON);
-    if (!smallIcon.isNull())
-        icon.addPixmap(smallIcon);
-    if (!largeIcon.isNull())
-        icon.addPixmap(largeIcon);
-#endif
-    if (icon.isNull())
-        icon = QApplication::style()->standardIcon(QStyle::SP_FileIcon);
-
-    cache.insert(extension, icon);
-    return icon;
+    const Icons::FileKind kind = kindOf(fileName);
+    auto found = cache.find(int(kind));
+    if (found == cache.end())
+        found = cache.insert(int(kind), Icons::fileIcon(kind));
+    return found.value();
 }

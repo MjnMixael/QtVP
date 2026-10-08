@@ -125,7 +125,7 @@
       <item row="2" column="0" colspan="2">
        <widget class="QLabel" name="toolsHint">
         <property name="text">
-         <string>Other files open in the app Windows uses for their type.</string>
+         <string>Other files open in your system's default app for their type.</string>
         </property>
         <property name="wordWrap">
          <bool>true</bool>

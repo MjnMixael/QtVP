@@ -10,7 +10,7 @@ QtVP keeps the familiar VPView32 layout (folder tree, file list, resizable previ
 
 - Open VP archives and browse their folders
 - Extract selected files, folders, or the whole archive; drag files straight out to Explorer
-- Open files in their usual app: ANI/EFF in AnimStudio, POF in POF Tools, everything else as Windows would
+- Open files in their usual app: ANI/EFF in AnimStudio, POF in POF Tools, everything else in the system default
 - Preview images (PCX, TGA, DDS, PNG, JPG), animations (ANI, EFF, APNG), and sounds (WAV, OGG)
 - Create and edit VPs: add, remove, rename, and save
 - Read compressed (LZ41) VP entries
