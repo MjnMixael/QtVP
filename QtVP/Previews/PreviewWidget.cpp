@@ -266,18 +266,7 @@ void PreviewWidget::togglePlay()
         return;
 
     if (!m_audio.isEmpty()) {
-        if (!m_player) {
-            m_player = new QMediaPlayer(this);
-            m_audioOutput = new QAudioOutput(this);
-            m_player->setAudioOutput(m_audioOutput);
-            m_audioBuffer = new QBuffer(this);
-            connect(m_player, &QMediaPlayer::playbackStateChanged, this, &PreviewWidget::playbackChanged);
-            connect(m_player, &QMediaPlayer::positionChanged, this, &PreviewWidget::updateSoundPosition);
-            connect(m_player, &QMediaPlayer::durationChanged, this, &PreviewWidget::updateSoundPosition);
-            connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString& text) {
-                m_frameLabel->setText(tr("Could not play the sound: %1").arg(text));
-            });
-        }
+        prepareAudio();
         if (!m_audioLoaded) {
             m_audioBuffer->setData(m_audio);
             m_audioBuffer->open(QIODevice::ReadOnly);
@@ -327,6 +316,25 @@ void PreviewWidget::nextFrame()
 {
     showFrame((m_frame + 1) % m_frames.size());
     m_timer->start(m_durations[m_frame]);
+}
+
+// The first player in the app loads the multimedia backend and opens the audio
+// device, which takes a noticeable moment; later players are cheap
+void PreviewWidget::prepareAudio()
+{
+    if (m_player)
+        return;
+
+    m_player = new QMediaPlayer(this);
+    m_audioOutput = new QAudioOutput(this);
+    m_player->setAudioOutput(m_audioOutput);
+    m_audioBuffer = new QBuffer(this);
+    connect(m_player, &QMediaPlayer::playbackStateChanged, this, &PreviewWidget::playbackChanged);
+    connect(m_player, &QMediaPlayer::positionChanged, this, &PreviewWidget::updateSoundPosition);
+    connect(m_player, &QMediaPlayer::durationChanged, this, &PreviewWidget::updateSoundPosition);
+    connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString& text) {
+        m_frameLabel->setText(tr("Could not play the sound: %1").arg(text));
+    });
 }
 
 // Detaches the player from the old buffer before its data goes away

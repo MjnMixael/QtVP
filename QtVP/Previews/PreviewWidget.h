@@ -76,6 +76,9 @@ public:
     void togglePlay();
     void stop();
 
+    // Creates the sound player now instead of on the first Play
+    void prepareAudio();
+
 signals:
     void playbackChanged();
 
