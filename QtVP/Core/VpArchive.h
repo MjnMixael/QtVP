@@ -39,6 +39,13 @@ public:
     // Called before each entry and once at the end; return false to cancel
     using ProgressFn = std::function<bool(int done, int total, const QString& path)>;
 
+    // Receives bytes as they are read; return false to stop
+    using Sink = std::function<bool(const char* data, qint64 length)>;
+
+    // A name that is safe to create on disk: not empty, not . or .., and no path or
+    // reserved characters, so a hostile VP cannot write outside the target folder
+    static bool isSafeName(const QString& name);
+
     struct ExtractResult
     {
         int extracted = 0;
@@ -78,14 +85,18 @@ public:
     // Returns the contents, decompressed if needed. Empty with *error set on failure.
     QByteArray readEntry(int entry, QString* error = nullptr) const;
 
+    // Feeds the contents to sink in pieces, decompressed if needed
+    bool streamEntry(int entry, const Sink& sink, QString* error) const;
+
+    // Feeds the bytes exactly as stored, so LZ41 entries stay compressed
+    bool streamRaw(int entry, const Sink& sink, QString* error) const;
+
     // Writes each entry under targetDir at its path relative to baseFolder,
     // restoring timestamps. Failures are collected and the rest carry on.
     ExtractResult extract(const std::vector<int>& entries, const QString& targetDir,
         int baseFolder = RootFolder, const ProgressFn& progress = {}) const;
 
 private:
-    using Sink = std::function<bool(const char* data, qint64 length)>;
-
     struct Lz41Info
     {
         quint32 size = 0;
@@ -99,7 +110,6 @@ private:
     int childFolder(int parent, const QString& name);
     bool readAt(qint64 pos, char* dst, qint64 length) const;
     Kind probeLocked(int entry, Lz41Info* info, QString* error) const;
-    bool streamEntry(int entry, const Sink& sink, QString* error) const;
     bool extractOne(int entry, const QString& outPath, QString* error) const;
     QString safeRelativePath(int entry, int baseFolder) const;
 

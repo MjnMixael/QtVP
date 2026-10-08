@@ -4,6 +4,11 @@
 #include <QTextStream>
 
 #include "Core/VpArchive.h"
+#include "Core/VpDocument.h"
+#include "Core/VpWriter.h"
+
+#include <QHash>
+#include <memory>
 
 // Command-line harness for VpArchive, so the VP core can be tested without the GUI
 
@@ -17,7 +22,8 @@ int usage()
     err << "Usage:\n"
            "  VpCheck list <file.vp>\n"
            "  VpCheck verify <file.vp> [more.vp ...]\n"
-           "  VpCheck extract <file.vp> <target folder>\n";
+           "  VpCheck extract <file.vp> <target folder>\n"
+           "  VpCheck roundtrip <file.vp> <copy.vp>\n";
     return 2;
 }
 
@@ -103,6 +109,70 @@ int extract(const QString& path, const QString& target)
     return result.errors.isEmpty() ? 0 : 1;
 }
 
+// Writes the VP back out through VpDocument and VpWriter, then checks the copy holds
+// the same files at the same paths, with the same timestamps and contents
+int roundtrip(const QString& path, const QString& copyPath)
+{
+    auto archive = std::make_unique<VpArchive>();
+    if (!openArchive(*archive, path))
+        return 1;
+    const VpDocument document(std::move(archive));
+    const VpArchive& original = *document.archive();
+
+    const VpWriter::Problems problems = VpWriter::check(document);
+    for (const QString& warning : problems.warnings)
+        err << "  warning: " << warning << "\n";
+    for (const QString& error : problems.errors)
+        err << "  error: " << error << "\n";
+    if (!problems.errors.isEmpty())
+        return 1;
+
+    VpWriter writer(copyPath);
+    if (!writer.write(document) || !writer.commit()) {
+        err << writer.errorString() << "\n";
+        return 1;
+    }
+
+    VpArchive copy;
+    if (!openArchive(copy, copyPath))
+        return 1;
+
+    QHash<QString, int> copyEntries;
+    for (int i = 0; i < int(copy.entries().size()); ++i)
+        copyEntries.insert(copy.entryPath(i), i);
+
+    int mismatches = 0;
+    auto mismatch = [&](const QString& what) {
+        err << "  " << what << "\n";
+        ++mismatches;
+    };
+
+    if (copy.entries().size() != original.entries().size())
+        mismatch(QString("%1 files in the copy, %2 in the original").arg(copy.entries().size()).arg(original.entries().size()));
+
+    for (int i = 0; i < int(original.entries().size()); ++i) {
+        const QString entryPath = original.entryPath(i);
+        const int c = copyEntries.value(entryPath, -1);
+        if (c < 0) {
+            mismatch(entryPath + ": missing from the copy");
+            continue;
+        }
+        if (copy.entries()[c].timestamp != original.entries()[i].timestamp)
+            mismatch(entryPath + ": timestamp differs");
+        if (copy.entries()[c].size != original.entries()[i].size || copy.isCompressed(c) != original.isCompressed(i))
+            mismatch(entryPath + ": stored size or compression differs");
+
+        QString errorA;
+        QString errorB;
+        if (original.readEntry(i, &errorA) != copy.readEntry(c, &errorB) || errorA != errorB)
+            mismatch(entryPath + ": contents differ");
+    }
+
+    out << QDir::toNativeSeparators(copyPath) << ": " << copy.entries().size() << " files, "
+        << copy.folders().size() - 1 << " folders, " << mismatches << " mismatches\n";
+    return mismatches == 0 ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
@@ -119,5 +189,7 @@ int main(int argc, char* argv[])
         return verify(args.mid(2));
     if (command == "extract" && args.size() == 4)
         return extract(args.at(2), args.at(3));
+    if (command == "roundtrip" && args.size() == 4)
+        return roundtrip(args.at(2), args.at(3));
     return usage();
 }

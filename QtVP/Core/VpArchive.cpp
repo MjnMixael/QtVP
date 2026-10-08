@@ -41,6 +41,11 @@ bool isSafeComponent(const QString& name)
 
 } // namespace
 
+bool VpArchive::isSafeName(const QString& name)
+{
+    return isSafeComponent(name);
+}
+
 bool VpArchive::open(const QString& path)
 {
     close();
@@ -346,6 +351,32 @@ bool VpArchive::streamEntry(int entry, const Sink& sink, QString* error) const
         if (!sink(dst.data(), expected))
             return false;
         remaining -= expected;
+    }
+    return true;
+}
+
+bool VpArchive::streamRaw(int entry, const Sink& sink, QString* error) const
+{
+    QMutexLocker lock(&m_mutex);
+    if (!m_file.isOpen()) {
+        if (error)
+            *error = tr("No archive is open.");
+        return false;
+    }
+
+    const VpEntry& e = m_entries[entry];
+    constexpr qint64 ChunkSize = 1024 * 1024;
+    std::vector<char> buffer(size_t(std::min<qint64>(ChunkSize, e.size)));
+    for (qint64 done = 0; done < e.size;) {
+        const qint64 n = std::min<qint64>(ChunkSize, e.size - done);
+        if (!readAt(qint64(e.offset) + done, buffer.data(), n)) {
+            if (error)
+                *error = tr("Read error: %1").arg(m_file.errorString());
+            return false;
+        }
+        if (!sink(buffer.data(), n))
+            return false;
+        done += n;
     }
     return true;
 }

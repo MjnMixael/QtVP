@@ -46,7 +46,7 @@ A standalone Qt replacement for VPView32: open VP archives, browse them, extract
 - Media playback: only one `PreviewWidget` plays through Qt Multimedia at a time (`PreviewWidget::s_mediaOwner`); pressing Play in the pane or the pop-out stops the other. Opening the pop-out stops the pane's media and suspends its autoplay until the pop-out closes (`PreviewWindow::closed`). Movies must use the same owner when they land. Closing the pop-out clears its content, which stops and releases its player; while closed it receives no previews, and reopening it loads the current one.
 - Temp files: drag-out uses a `QTemporaryDir` in `%TEMP%` removed on exit; Open uses `%TEMP%\QtVP\Open\`, kept on exit so editors keep their files. Windows does not clean `%TEMP%` by default (only Storage Sense or Disk Cleanup), so `warmUp()` sweeps Open folders older than a day as a backstop.
 - `Icons` draws the preview buttons' icons (play, pause, stop, pop-out) and the sound placeholder as vector shapes in the palette's text color at paint time, so they follow the theme. The toolbar actions still use Qt standard icons.
-- **Next: user builds and tries phase 4, then Phase 5 (creating and editing VPs).**
+- **Next: user builds and runs `VpCheck roundtrip` on a few VPs (ideally one with LZ41 entries); then phase 5 step 2.**
 
 ## Working conventions
 
@@ -142,11 +142,16 @@ From the engine (`code/cfile/cfilesystem.cpp`, `code/cfile/cfilecompression.*`, 
 - Sound: WAV and OGG via Qt Multimedia. Adds `multimedia` to `QtModules` and `qtmultimedia` to the release workflow.
 - Text and table viewer.
 
-### 5. Creating and editing VPs
+### 5. Creating and editing VPs (in progress)
 - New VP, add files or folders (including drag-in from Explorer), delete, rename, new folder, save, save as.
 - Saving always writes a new file and replaces the old one only on success (`QSaveFile`), so a failed save cannot corrupt the VP.
 - Warn on names over 31 characters and on names that differ only by case within a folder.
 - Track unsaved changes; prompt on close.
+- Undo/redo for every edit (user decision, 2026-10-08), with `QUndoStack` in the GUI driving `VpDocument`'s reversible edits. Saving reloads the VP from the new file and clears the history, because history refers to the old file's data.
+- Edit-back (user decision, 2026-10-08): watch the files Open handed to other apps; when QtVP regains focus and any changed, ask "One or more files were edited. Pack the edits back into this VP?" Yes adds them as pending, undoable changes; nothing is written until Save.
+- Steps, one commit each: (1) `Core\VpDocument` and `Core\VpWriter`, plus `VpCheck roundtrip` - written, awaiting build; (2) move the GUI from `VpArchive` to `VpDocument` with no visible change; (3) editing commands, undo/redo, Save/Save As, New VP, modified marker, close prompt; (4) edit-back.
+- `VpDocument` (QtCore only) mirrors an opened `VpArchive` (same ids as its entries and folders) and applies edits as field changes; removed items are only flagged, so ids never shift and each edit is undone by the same call with the old value. A file's `VpFileSource` is an archive entry or a disk path, a plain value a worker thread can read through. `VpDocument::extract` replaces `VpArchive::extract` once the GUI moves over.
+- `VpWriter`: `check()` reports errors (names over 31 characters, outside Latin-1, or unsafe; empty files, since a size 0 entry is a folder to the engine; over 4 GB) and warnings (names the engine treats as the same in one folder). `write()` streams to a `QSaveFile` beside the target, copying archive entries exactly as stored (LZ41 stays compressed), then `commit()` swaps it in. Saving over the open VP must close the archive between the two, because Windows will not replace an open file. Layout: data from offset 16, directory at the end, each folder's files before its subfolders, folder and ".." records with offset 0 and time 0 (the commonest convention in 214 local VPs; the engine reads neither).
 
 ### 6. Later
 - Movie previews (definitely wanted).

@@ -32,6 +32,7 @@ The solution also builds `VpCheck`, a small console tool for testing the VP core
 VpCheck list <file.vp>
 VpCheck verify <file.vp> [more.vp ...]
 VpCheck extract <file.vp> <target folder>
+VpCheck roundtrip <file.vp> <copy.vp>
 ```
 
 ## Third-party code

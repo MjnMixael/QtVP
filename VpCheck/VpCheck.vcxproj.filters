@@ -16,12 +16,24 @@
     <ClCompile Include="..\QtVP\Core\VpArchive.cpp">
       <Filter>QtVP Core</Filter>
     </ClCompile>
+    <ClCompile Include="..\QtVP\Core\VpDocument.cpp">
+      <Filter>QtVP Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\QtVP\Core\VpWriter.cpp">
+      <Filter>QtVP Core</Filter>
+    </ClCompile>
     <ClCompile Include="..\QtVP\Dependencies\lz4\lz4.c">
       <Filter>QtVP Core</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\QtVP\Core\VpArchive.h">
+      <Filter>QtVP Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\QtVP\Core\VpDocument.h">
+      <Filter>QtVP Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\QtVP\Core\VpWriter.h">
       <Filter>QtVP Core</Filter>
     </ClInclude>
     <ClInclude Include="..\QtVP\Dependencies\lz4\lz4.h">

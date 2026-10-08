@@ -44,6 +44,12 @@
     <ClCompile Include="Core\VpArchive.cpp">
       <Filter>Source Files\Core</Filter>
     </ClCompile>
+    <ClCompile Include="Core\VpDocument.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\VpWriter.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
     <ClCompile Include="Models\FileListModel.cpp">
       <Filter>Source Files\Models</Filter>
     </ClCompile>
@@ -89,6 +95,12 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\VpArchive.h">
+      <Filter>Source Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\VpDocument.h">
+      <Filter>Source Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\VpWriter.h">
       <Filter>Source Files\Core</Filter>
     </ClInclude>
     <ClInclude Include="Models\FileTypeIcons.h">

@@ -104,11 +104,15 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="..\QtVP\Core\VpArchive.cpp" />
+    <ClCompile Include="..\QtVP\Core\VpDocument.cpp" />
+    <ClCompile Include="..\QtVP\Core\VpWriter.cpp" />
     <ClCompile Include="..\QtVP\Dependencies\lz4\lz4.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
       <SDLCheck>false</SDLCheck>
     </ClCompile>
     <ClInclude Include="..\QtVP\Core\VpArchive.h" />
+    <ClInclude Include="..\QtVP\Core\VpDocument.h" />
+    <ClInclude Include="..\QtVP\Core\VpWriter.h" />
     <ClInclude Include="..\QtVP\Dependencies\lz4\lz4.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
