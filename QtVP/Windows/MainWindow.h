@@ -30,6 +30,9 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+    // Loads the slow-to-start parts up front; called while the splash screen shows
+    void warmUp();
+
     void openVp(const QString& path);
     void closeVp();
 

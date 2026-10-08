@@ -79,10 +79,13 @@ MainWindow::MainWindow(QWidget* parent)
     updateSelectionStatus();
 
     statusBar()->showMessage(tr("Ready"));
+}
 
-    // Starting the audio backend takes a moment and has to happen on this thread, so do it
-    // just after the window first paints rather than on the first Play
-    QTimer::singleShot(250, this, [this] { ui->previewArea->prepareAudio(); });
+// Starting the audio backend takes a moment and has to happen on the UI thread, so it
+// runs behind the splash screen rather than on the first Play
+void MainWindow::warmUp()
+{
+    ui->previewArea->prepareAudio();
 }
 
 MainWindow::~MainWindow()
