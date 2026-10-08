@@ -122,6 +122,7 @@
     <ClInclude Include="Previews\ImageDecoders.h" />
     <ClInclude Include="Previews\PreviewContent.h" />
     <ClInclude Include="Previews\PreviewLoader.h" />
+    <ClInclude Include="Dependencies\bcdec\bcdec.h" />
     <ClInclude Include="Dependencies\lz4\lz4.h" />
     <QtUic Include="Forms\MainWindow.ui" />
     <QtUic Include="Forms\OptionsDialog.ui" />

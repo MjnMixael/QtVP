@@ -36,6 +36,7 @@ VpCheck extract <file.vp> <target folder>
 ## Third-party code
 
 - [LZ4](https://github.com/lz4/lz4) 1.10.0 (`lz4.c`, `lz4.h`), BSD 2-Clause. See `QtVP/Dependencies/lz4/LICENSE`.
+- [bcdec](https://github.com/iOrange/bcdec) 0.985 (`bcdec.h`), MIT or Unlicense. The license is at the end of the header.
 
 ## License
 

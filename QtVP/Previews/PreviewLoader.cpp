@@ -25,11 +25,14 @@ PreviewContent imagePreview(const QString& ext, const QByteArray& data)
     QString details;
     QString error;
     QImage image;
+    QSize size;
 
     if (ext == "pcx") {
         image = ImageDecoders::decodePcx(data, &details, &error);
     } else if (ext == "tga") {
         image = ImageDecoders::decodeTga(data, &details, &error);
+    } else if (ext == "dds") {
+        image = ImageDecoders::decodeDds(data, &details, &error, &size);
     } else {
         image = QImage::fromData(data);
         if (image.isNull())
@@ -44,7 +47,9 @@ PreviewContent imagePreview(const QString& ext, const QByteArray& data)
     PreviewContent content;
     content.kind = PreviewContent::Kind::Image;
     content.image = image;
-    content.info = tr("%1, %2 x %3, %4").arg(ext.toUpper()).arg(image.width()).arg(image.height()).arg(details);
+    if (!size.isValid())
+        size = image.size();
+    content.info = tr("%1, %2 x %3, %4").arg(ext.toUpper()).arg(size.width()).arg(size.height()).arg(details);
     return content;
 }
 
@@ -55,7 +60,7 @@ PreviewContent PreviewLoader::load(const VpArchive& archive, int entry)
     const QString name = archive.entries()[entry].name;
     const QString ext = QFileInfo(name).suffix().toLower();
 
-    static const QStringList imageTypes{ "png", "jpg", "jpeg", "pcx", "tga" };
+    static const QStringList imageTypes{ "png", "jpg", "jpeg", "pcx", "tga", "dds" };
     if (!imageTypes.contains(ext)) {
         PreviewContent content = PreviewContent::fromMessage(ext.isEmpty()
             ? tr("No preview for files without an extension")
