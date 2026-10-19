@@ -7,8 +7,9 @@ on:
     tags:
       - 'V*'
       - 'v*'
+      - 'Version_*'
   # Manual dry-run from the Actions tab: builds both OSes and uploads artifacts,
-  # but only publishes a Release on a real tag.
+  # but only publishes a Release (and opens the Knossos PR) on a real tag.
   workflow_dispatch:
 
 permissions:
@@ -143,14 +144,24 @@ jobs:
           built="$(ls -1 QtVP*.AppImage | head -n1)"
           appimage="QtVP-${name}-x86_64.AppImage"
           if [ "$built" != "$appimage" ]; then mv "$built" "$appimage"; fi
-          echo "ASSET=$appimage" >> "$GITHUB_ENV"
 
-      - name: Upload build artifact (Linux)
+          # Knossos Linux package: a zip of the self-contained bundle. linuxdeploy
+          # populated AppDir with the binary + bundled Qt and wrote qt.conf, so
+          # usr/bin/QtVP finds its plugins without FUSE. -y keeps the symlinks.
+          knzip="QtVP-${name}-linux-x86_64.zip"
+          ( cd "$appdir" && zip -ryq "$GITHUB_WORKSPACE/$knzip" . )
+
+          echo "APPIMAGE=$appimage" >> "$GITHUB_ENV"
+          echo "KNZIP=$knzip" >> "$GITHUB_ENV"
+
+      - name: Upload build artifacts (Linux)
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v6
         with:
           name: QtVP-linux
-          path: ${{ env.ASSET }}
+          path: |
+            ${{ env.APPIMAGE }}
+            ${{ env.KNZIP }}
 
   # Publish both OS assets to the Release, but only on a real tag.
   release:
@@ -172,3 +183,171 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+
+  # Open a pull request against the Knossos tool repo to point it at the new
+  # release. Creates the QtVP entry if it isn't listed yet, otherwise patches it.
+  # Runs only on a real tag, after the Release is published, and only if the
+  # KNOSSOS_PAT secret is configured.
+  knossos-pr:
+    name: Propose Knossos update
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for token
+        id: gate
+        env:
+          KNOSSOS_PAT: ${{ secrets.KNOSSOS_PAT }}
+        run: |
+          if [ -n "$KNOSSOS_PAT" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::KNOSSOS_PAT secret not set — skipping Knossos PR."
+          fi
+
+      - name: Checkout Knossos tool repo (upstream)
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v5
+        with:
+          repository: KnossosNET/Knet-Tool-Repo
+          ref: main
+          token: ${{ secrets.KNOSSOS_PAT }}
+          path: knossos
+
+      - name: Update knet_tools.json
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: knossos
+        env:
+          TAG: ${{ github.ref_name }}
+          APP_NAME: "QtVP"
+          APP_DESC: "A VP archive viewer and extractor for FreeSpace Open."
+          WIN_EXE_PATH: "QtVP.exe"
+          LINUX_EXE_PATH: "usr/bin/QtVP"
+        run: |
+          set -euo pipefail
+          # Strip any leading tag prefix (V, v, Version_) to get the bare version.
+          export VER="$(echo "$TAG" | sed -E 's/^[^0-9]*//')"
+          export DATE="$(date -u +%F)"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          export WIN_URL="$base/${APP_NAME}-${TAG}-win64.zip"
+          export LINUX_URL="$base/${APP_NAME}-${TAG}-linux-x86_64.zip"
+          # Create the tool entry if it doesn't exist yet, otherwise patch it in
+          # place (version / last_update, windows + linux package URLs, cpu_arch
+          # x64). Identical across every app's workflow, so it copies as-is.
+          python3 - "knet_tools.json" <<'PY'
+          import io, os, re, json, sys
+          path = sys.argv[1]
+          app     = os.environ["APP_NAME"]
+          ver     = os.environ["VER"]
+          date    = os.environ["DATE"]
+          win     = os.environ["WIN_URL"]
+          lin     = os.environ["LINUX_URL"]
+          desc    = os.environ["APP_DESC"]
+          win_exe = os.environ["WIN_EXE_PATH"]
+          lin_exe = os.environ["LINUX_EXE_PATH"]
+
+          s = io.open(path, encoding="utf-8").read()
+          m = re.search(r'"name"\s*:\s*"%s"' % re.escape(app), s)
+
+          if m:
+              # Patch the existing entry in place (minimal, surgical).
+              start = s.rfind("{", 0, m.start())
+              depth, i, end = 0, start, None
+              while i < len(s):
+                  if s[i] == "{":
+                      depth += 1
+                  elif s[i] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          break
+                  i += 1
+              if end is None:
+                  sys.exit("could not find end of %s object" % app)
+              block = s[start:end]
+              block = re.sub(r'("version"\s*:\s*)"[^"]*"',     r'\g<1>"%s"' % ver,  block, count=1)
+              block = re.sub(r'("last_update"\s*:\s*)"[^"]*"', r'\g<1>"%s"' % date, block, count=1)
+              block = re.sub(r'("cpu_arch"\s*:\s*)"[^"]*"',    r'\g<1>"x64"',       block)
+              block = re.sub(r'("download_url"\s*:\s*)"[^"]*win64\.zip"',
+                             r'\g<1>"%s"' % win, block, count=1)
+              if re.search(r'"os"\s*:\s*"linux"', block):
+                  block = re.sub(r'("download_url"\s*:\s*)"[^"]*linux-x86_64\.zip"',
+                                 r'\g<1>"%s"' % lin, block, count=1)
+              else:
+                  linux_pkg = (
+                      '      {\n'
+                      '        "download_url": "%s",\n'
+                      '        "os": "linux",\n'
+                      '        "cpu_arch": "x64",\n'
+                      '        "executable_path": "%s"\n'
+                      '      }' % (lin, lin_exe)
+                  )
+                  block, n = re.subn(r'\n([ \t]*)\}\n([ \t]*)\]',
+                                     '\n\\1},\n' + linux_pkg + '\n\\2]', block, count=1)
+                  if n != 1:
+                      sys.exit("could not locate packages array to insert linux package")
+              s2 = s[:start] + block + s[end:]
+          else:
+              # Create a new entry and append it to the tool array.
+              entry = (
+                  '  {\n'
+                  '    "name": %s,\n'
+                  '    "version": %s,\n'
+                  '    "description": %s,\n'
+                  '    "last_update": %s,\n'
+                  '    "cmdline": "",\n'
+                  '    "packages": [\n'
+                  '      {\n'
+                  '        "download_url": %s,\n'
+                  '        "os": "windows",\n'
+                  '        "cpu_arch": "x64",\n'
+                  '        "executable_path": %s\n'
+                  '      },\n'
+                  '      {\n'
+                  '        "download_url": %s,\n'
+                  '        "os": "linux",\n'
+                  '        "cpu_arch": "x64",\n'
+                  '        "executable_path": %s\n'
+                  '      }\n'
+                  '    ]\n'
+                  '  }' % (json.dumps(app), json.dumps(ver), json.dumps(desc), json.dumps(date),
+                          json.dumps(win), json.dumps(win_exe), json.dumps(lin), json.dumps(lin_exe))
+              )
+              s2, n = re.subn(r'\n\]\s*$', ',\n' + entry + '\n]\n', s, count=1)
+              if n != 1:
+                  sys.exit("could not find end of tool array to append %s" % app)
+
+          data = json.loads(s2)  # fail loudly if we produced invalid JSON
+          e = [x for x in data if x.get("name") == app][0]
+          assert e["version"] == ver, e["version"]
+          assert e["last_update"] == date, e["last_update"]
+          pkgs = dict((p.get("os"), p) for p in e["packages"])
+          assert pkgs["windows"]["download_url"] == win
+          assert pkgs["windows"]["cpu_arch"] == "x64"
+          assert pkgs["linux"]["download_url"] == lin
+          assert pkgs["linux"]["cpu_arch"] == "x64"
+          assert pkgs["linux"]["executable_path"] == lin_exe
+
+          io.open(path, "w", encoding="utf-8", newline="").write(s2)
+          PY
+          git --no-pager diff -- knet_tools.json
+
+      - name: Create pull request
+        if: steps.gate.outputs.enabled == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.KNOSSOS_PAT }}
+          path: knossos
+          push-to-fork: MjnMixael/Knet-Tool-Repo
+          branch: qtvp-${{ github.ref_name }}
+          base: main
+          commit-message: "Update QtVP to ${{ github.ref_name }}"
+          title: "Update QtVP to ${{ github.ref_name }}"
+          body: |
+            Automated update of **QtVP** to `${{ github.ref_name }}`.
+
+            - Release: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+
+            Opened automatically by the QtVP release workflow.
+          delete-branch: true
