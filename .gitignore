@@ -1,5 +1,13 @@
+# Visual Studio / legacy MSBuild
 .vs/
 x64/
 QtVP/x64/
 VpCheck/x64/
 *.vcxproj.user
+
+# CMake build trees (CMakePresets uses build/<preset>; VS "Open Folder" uses out/)
+build/
+out/
+
+# Per-developer CMake presets (e.g. local Qt path via CMAKE_PREFIX_PATH)
+CMakeUserPresets.json
