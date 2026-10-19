@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Placeholder app icon: dark card with the splash's stacked-archive motif. -->
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="#1c2434"/>
+  <rect x="64" y="74"  width="128" height="28" rx="7" fill="#3a5a80"/>
+  <rect x="64" y="114" width="128" height="28" rx="7" fill="#569cda"/>
+  <rect x="64" y="154" width="128" height="28" rx="7" fill="#3a5a80"/>
+</svg>

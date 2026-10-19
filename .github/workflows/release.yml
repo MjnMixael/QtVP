@@ -1,103 +1,176 @@
 name: Release
 
-# Build QtVP and publish binaries to a GitHub Release when a version
-# tag (e.g. v1.2.3) is pushed.
+# Build QtVP for Windows and Linux and publish binaries to a GitHub Release
+# when a version tag (e.g. V1.2.3) is pushed.
 on:
   push:
     tags:
       - 'V*'
       - 'v*'
-  # Allow a manual dry-run from the Actions tab (builds, uploads artifact,
-  # but only publishes a Release when triggered by a tag).
+  # Manual dry-run from the Actions tab: builds both OSes and uploads artifacts,
+  # but only publishes a Release on a real tag.
   workflow_dispatch:
 
 permissions:
   contents: write   # required to create the Release and upload assets
 
 jobs:
-  windows:
-    name: Windows (x64)
-    runs-on: windows-2025   # VS 2026 (v145) image since June 2026
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            qt_host: windows
+            qt_arch: win64_msvc2022_64
+          - os: ubuntu-latest
+            qt_host: linux
+            qt_arch: linux_gcc_64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
+      # QtVP uses core/gui/widgets/concurrent plus multimedia (sound/video
+      # previews), so the qtmultimedia module is installed on both OSes.
       - name: Install Qt 6.8.3
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
-          host: windows
+          host: ${{ matrix.qt_host }}
           target: desktop
-          arch: win64_msvc2022_64
-          # QtVP uses core, gui, and widgets (base Qt) plus multimedia for sound previews
-          modules: 'qtmultimedia'
+          arch: ${{ matrix.qt_arch }}
+          modules: qtmultimedia
           cache: true
 
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
+      # ---- Windows -------------------------------------------------------
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: x64
 
-      - name: Fetch Qt VS Tools MSBuild integration (QtMsBuild)
-        shell: pwsh
-        env:
-          VSADDIN_VERSION: '3.4.1'
-        run: |
-          # The .vcxproj imports Qt.props / qt.targets from $(QtMsBuild). Those
-          # files ship inside the Qt VS Tools add-in .vsix, which is just a zip.
-          # Extract the QtMSBuild folder and point $(QtMsBuild) at it so the
-          # project's imports resolve without the VS extension being installed.
-          $ver = $env:VSADDIN_VERSION
-          $url = "https://download.qt.io/official_releases/vsaddin/$ver/qt-vsaddin-msvc2022-x64-$ver.vsix"
-          Invoke-WebRequest -Uri $url -OutFile qtvsaddin.zip
-          Expand-Archive -Path qtvsaddin.zip -DestinationPath qtvsaddin -Force
-          $qtmsbuild = Join-Path $PWD "qtvsaddin\QtMSBuild"
-          if (-not (Test-Path "$qtmsbuild\qt.targets")) {
-            throw "QtMSBuild not found at $qtmsbuild"
-          }
-          "QtMsBuild=$qtmsbuild" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - name: Build (Release|x64)
+      - name: Configure & build (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # QT_ROOT_DIR is exported by install-qt-action and points at the Qt
-          # install. QtMsBuild accepts a full path in QtInstall, bypassing the
-          # machine-registered-version lookup that the local .vcxproj relies on.
-          msbuild QtVP.slnx `
-            /m `
-            /p:Configuration=Release `
-            /p:Platform=x64 `
-            /p:QtInstall="$env:QT_ROOT_DIR" `
-            /verbosity:minimal
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+          cmake --build build --parallel
 
-      - name: Package with windeployqt
+      - name: Package with windeployqt (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $name = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "dev" }
           $staging = "dist\QtVP"
           New-Item -ItemType Directory -Force -Path $staging | Out-Null
-          Copy-Item "x64\Release\QtVP.exe" $staging
+          Copy-Item "build\QtVP.exe" $staging
           & "$env:QT_ROOT_DIR\bin\windeployqt.exe" `
             --release --no-translations --compiler-runtime `
             "$staging\QtVP.exe"
           Copy-Item "README.md","LICENSE" $staging -ErrorAction SilentlyContinue
-
-      - name: Zip
-        shell: pwsh
-        run: |
-          $name = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "dev" }
           $zip = "QtVP-$name-win64.zip"
           Compress-Archive -Path "dist\QtVP\*" -DestinationPath $zip -Force
           "ASSET=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload build artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v6
         with:
           name: QtVP-win64
           path: ${{ env.ASSET }}
 
-      - name: Publish to Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+      # ---- Linux ---------------------------------------------------------
+      - name: Install Linux build, Qt xcb & multimedia deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # ninja for the build; libgl + libxcb-* for the Qt 'xcb' platform
+          # plugin; libpulse/libasound for the multimedia backend; librsvg2-bin
+          # to rasterize the placeholder icon for the AppImage.
+          sudo apt-get install -y \
+            ninja-build librsvg2-bin \
+            libgl1-mesa-dev libxkbcommon-dev \
+            libxcb1-dev libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 libxcb-util1 \
+            libpulse0 libasound2t64
+
+      - name: Configure & build (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          cmake --build build --parallel
+
+      - name: Package AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          name="${GITHUB_REF_NAME:-dev}"
+          appdir="$PWD/AppDir"
+          mkdir -p "$appdir/usr/bin" \
+                   "$appdir/usr/share/applications" \
+                   "$appdir/usr/share/icons/hicolor/256x256/apps"
+          cp build/QtVP "$appdir/usr/bin/QtVP"
+          rsvg-convert -w 256 -h 256 packaging/QtVP.svg \
+            -o "$appdir/usr/share/icons/hicolor/256x256/apps/QtVP.png"
+          {
+            echo "[Desktop Entry]"
+            echo "Type=Application"
+            echo "Name=QtVP"
+            echo "Comment=VP archive viewer for FreeSpace Open"
+            echo "Exec=QtVP"
+            echo "Icon=QtVP"
+            echo "Categories=Utility;"
+            echo "Terminal=false"
+          } > "$appdir/usr/share/applications/QtVP.desktop"
+
+          curl -fL -o linuxdeploy \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -fL -o linuxdeploy-plugin-qt \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy linuxdeploy-plugin-qt
+          export PATH="$PWD:$PATH"
+
+          # Runners lack FUSE; run the AppImage tools by extracting instead.
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export QMAKE="$QT_ROOT_DIR/bin/qmake"
+          # Bundle the Qt multimedia plugins explicitly so previews work.
+          export EXTRA_QT_MODULES="multimedia"
+          ./linuxdeploy --appdir "$appdir" --plugin qt --output appimage
+
+          built="$(ls -1 QtVP*.AppImage | head -n1)"
+          appimage="QtVP-${name}-x86_64.AppImage"
+          if [ "$built" != "$appimage" ]; then mv "$built" "$appimage"; fi
+          echo "ASSET=$appimage" >> "$GITHUB_ENV"
+
+      - name: Upload build artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v6
         with:
-          files: ${{ env.ASSET }}
+          name: QtVP-linux
+          path: ${{ env.ASSET }}
+
+  # Publish both OS assets to the Release, but only on a real tag.
+  release:
+    name: Publish Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/**
           draft: false
           prerelease: false
           generate_release_notes: true
