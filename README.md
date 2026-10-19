@@ -75,5 +75,5 @@ QtVP bundles a few small open-source libraries:
 
 # Credits
 
-QtVP is developed by MjnMixael.
+QtVP is developed by Mike Nelson.
 Licensed under the GNU GPL v3. See [LICENSE](LICENSE).
