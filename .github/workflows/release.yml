@@ -4,10 +4,6 @@ name: Release
 # when a version tag (e.g. V1.2.3) is pushed.
 on:
   push:
-    branches:
-      # TEMPORARY: dry-run CI on this branch (build + artifacts, no publish).
-      # Remove before merging to main.
-      - 'cmake-cross-platform'
     tags:
       - 'V*'
       - 'v*'
