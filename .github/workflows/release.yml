@@ -88,10 +88,9 @@ jobs:
         run: |
           sudo apt-get update
           # ninja for the build; libgl + libxcb-* for the Qt 'xcb' platform
-          # plugin; libpulse/libasound for the multimedia backend; librsvg2-bin
-          # to rasterize the placeholder icon for the AppImage.
+          # plugin; libpulse/libasound for the multimedia backend.
           sudo apt-get install -y \
-            ninja-build librsvg2-bin \
+            ninja-build \
             libgl1-mesa-dev libxkbcommon-dev \
             libxcb1-dev libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
             libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
@@ -115,8 +114,7 @@ jobs:
                    "$appdir/usr/share/applications" \
                    "$appdir/usr/share/icons/hicolor/256x256/apps"
           cp build/QtVP "$appdir/usr/bin/QtVP"
-          rsvg-convert -w 256 -h 256 packaging/QtVP.svg \
-            -o "$appdir/usr/share/icons/hicolor/256x256/apps/QtVP.png"
+          cp packaging/QtVP.png "$appdir/usr/share/icons/hicolor/256x256/apps/QtVP.png"
           {
             echo "[Desktop Entry]"
             echo "Type=Application"

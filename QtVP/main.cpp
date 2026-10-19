@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QIcon>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QScreen>
@@ -15,7 +16,7 @@ namespace {
 // Long enough to read, so a fast start does not just flash the splash
 constexpr int MinimumSplashMs = 800;
 
-// Placeholder art until the app has a real logo
+// Composed splash: the app logo on the left, title and subtitle on the right.
 QPixmap splashPixmap()
 {
     const QSize size(480, 270);
@@ -27,34 +28,30 @@ QPixmap splashPixmap()
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
 
     QLinearGradient background(0, 0, size.width(), size.height());
     background.setColorAt(0, QColor(28, 36, 52));
     background.setColorAt(1, QColor(12, 16, 26));
     painter.fillRect(QRect(QPoint(0, 0), size), background);
 
-    // A stack of three "archive" slabs
-    const QColor accent(86, 156, 214);
-    for (int i = 0; i < 3; ++i) {
-        const QRectF slab(48, 78 + i * 26, 92, 18);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(i == 1 ? accent : accent.darker(160 - i * 20));
-        painter.drawRoundedRect(slab, 4, 4);
-    }
+    const QPixmap logo(":/Resources/icon.png");
+    const int s = 180;
+    painter.drawPixmap(QRect(26, (size.height() - s) / 2, s, s), logo);
 
     QFont title = painter.font();
-    title.setPixelSize(56);
+    title.setPixelSize(54);
     title.setBold(true);
     painter.setFont(title);
     painter.setPen(Qt::white);
-    painter.drawText(QRect(164, 70, 300, 70), Qt::AlignLeft | Qt::AlignVCenter, "QtVP");
+    painter.drawText(QRect(214, 72, 250, 66), Qt::AlignLeft | Qt::AlignVCenter, "QtVP");
 
     QFont subtitle = painter.font();
     subtitle.setPixelSize(15);
     subtitle.setBold(false);
     painter.setFont(subtitle);
     painter.setPen(QColor(170, 182, 200));
-    painter.drawText(QRect(166, 136, 300, 24), Qt::AlignLeft | Qt::AlignVCenter,
+    painter.drawText(QRect(216, 140, 236, 40), Qt::AlignLeft | Qt::TextWordWrap,
         QCoreApplication::translate("main", "VP archive viewer for FreeSpace Open"));
 
     return pixmap;
@@ -67,6 +64,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("QtVP");
     QCoreApplication::setApplicationName("QtVP");
+    app.setWindowIcon(QIcon(":/Resources/icon.png"));
     Theme::apply(Theme::saved());
 
     QElapsedTimer shown;

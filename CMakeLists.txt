@@ -16,6 +16,10 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS
 
 qt_standard_project_setup()
 
+# qt_standard_project_setup() enables AUTOMOC/AUTOUIC but not AUTORCC; this app
+# embeds its icon via a .qrc, so compile resources too.
+set(CMAKE_AUTORCC ON)
+
 # Bundled lz4 is plain C - no Qt autogen.
 set_source_files_properties(QtVP/Dependencies/lz4/lz4.c PROPERTIES SKIP_AUTOGEN ON)
 
@@ -50,6 +54,8 @@ qt_add_executable(QtVP WIN32
     # Designer forms (AUTOUIC)
     QtVP/Forms/MainWindow.ui
     QtVP/Forms/OptionsDialog.ui
+    # Embedded resources (AUTORCC) - app/window icon
+    QtVP/Resources.qrc
 )
 
 target_compile_features(QtVP PRIVATE cxx_std_17)
@@ -72,6 +78,11 @@ target_link_libraries(QtVP PRIVATE
 
 if(MSVC)
     target_compile_definitions(QtVP PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE _UNICODE)
+endif()
+
+# Windows application icon (embedded in the .exe via the resource compiler).
+if(WIN32)
+    target_sources(QtVP PRIVATE QtVP/app_icon.rc)
 endif()
 
 # F5 in the generated VS solution launches the app, not the ALL_BUILD target.
