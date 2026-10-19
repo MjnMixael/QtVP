@@ -1,10 +1,21 @@
-# QtVP
+<br />
+<div align="center">
+  <a href="https://github.com/MjnMixael/QtVP">
+    <img src="QtVP/Resources/icon.png" alt="Logo" width="80" height="80">
+  </a>
 
-A Qt-based VP archive viewer and extractor for FreeSpace Open.
+  <h3 align="center">QtVP</h3>
 
-QtVP keeps the familiar VPView32 layout (folder tree, file list, resizable preview pane) and brings it up to date with the formats the modern engine uses.
+  <p align="center">
+    A VP archive viewer and extractor for FreeSpace Open.
+  </p>
+</div>
 
-> The app is feature-complete; custom icons and branding are still placeholders. See [PLAN.md](PLAN.md) for background.
+## About
+
+QtVP is a Qt-based VP archive viewer and extractor for the FreeSpace Open engine. It keeps the familiar VPView32 layout (folder tree, file list, resizable preview pane) and brings it up to date with the formats the modern engine uses.
+
+QtVP uses [Qt Designer](https://www.qt.io/product/ui-design-tools) for its UI development.
 
 ## Features
 
@@ -15,7 +26,7 @@ QtVP keeps the familiar VPView32 layout (folder tree, file list, resizable previ
 - Create and edit VPs: add, remove, rename, and save
 - Read compressed (LZ41) VP entries
 - Light and dark themes, or follow the system
-- Cross-platform: Windows and Linux
+- Cross-platform (Windows/Linux) and fast, native performance
 
 ## Building
 
@@ -44,12 +55,25 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/pat
 cmake --build build
 ```
 
-## Third-party code
+## Usage
 
-- [LZ4](https://github.com/lz4/lz4) 1.10.0 (`lz4.c`, `lz4.h`), BSD 2-Clause. See `QtVP/Dependencies/lz4/LICENSE`.
-- [bcdec](https://github.com/iOrange/bcdec) 0.985 (`bcdec.h`), MIT or Unlicense. The license is at the end of the header.
-- [etcdec](https://github.com/iOrange/etcdec) 0.91 (`etcdec.h`), MIT or Unlicense. The license is at the end of the header.
+<img src="Preview.png">
 
-## License
+Load an archive with **Load VP** (or File → Open), then browse the folder tree and file list. Select a file to preview it in the right-hand pane — images, animations, and sounds render in place. Use **Extract to Folder** to pull out selected files, folders, or the whole archive, or drag entries straight to your file manager. Create and edit archives from the Edit menu (add, remove, rename, and save). Files with an associated tool open there; everything else opens in the system default app.
 
-GNU GPL v3. See [LICENSE](LICENSE).
+## Dependencies
+
+QtVP bundles a few small open-source libraries:
+
+- **[LZ4](https://github.com/lz4/lz4)** 1.10.0 – Fast (de)compression for LZ41 VP entries. BSD 2-Clause; see `QtVP/Dependencies/lz4/LICENSE`.
+- **[bcdec](https://github.com/iOrange/bcdec)** 0.985 – BC/DXT texture decoding for DDS previews. MIT or Unlicense.
+- **[etcdec](https://github.com/iOrange/etcdec)** 0.91 – ETC texture decoding. MIT or Unlicense.
+
+## Known Issues
+
+- None currently!
+
+# Credits
+
+QtVP is developed by MjnMixael.
+Licensed under the GNU GPL v3. See [LICENSE](LICENSE).
